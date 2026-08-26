@@ -411,6 +411,46 @@ balancing-authority region, mirroring Brazil's ANEEL-subsystem map) is not built
 a verified balancing-authority field on EIA-860's per-plant records, which has not been checked.
 Recorded as a distinct follow-up rather than assumed to exist.
 
+### 2.9 Fixing §2.8's rollout — two real bugs and an operational gap found in live browser use
+
+User feedback against the running dashboard surfaced three problems, diagnosed against the real
+local stack rather than guessed at:
+
+1. **The plant map's Brazil/USA toggle and the adjacent per-zone totals panel were out of sync.**
+   `PlantMap` owned `source: PlantRegistrySource` as internal `useState`; the sibling
+   `SubsystemTotals` panel (originally under `BrazilSection`) was hardcoded to ONS and never saw
+   the map's toggle, so switching the map to "USA (EIA Form 860)" left Brazil's `BR-N/NE/S/SE`
+   totals showing beside it. Fixed by lifting the toggle to a new `PlantMapSection`
+   (`apps/web/src/components/dashboard/plant-map-section.tsx`) that owns `source` and passes it
+   down as a controlled prop to both `PlantMap` (now stateless re: source) and a generalized
+   `RegionalTotals` component (`regional-totals.tsx`, replacing the ONS-only `SubsystemTotals`) —
+   the pairing moved out of `BrazilSection` into its own top-level dashboard section since it
+   isn't Brazil-only. `GET /generation-latest`'s `source` query param widened from the literal
+   `"ONS"` to the full `sourceSchema` (same widening precedent as `/generation-mix` in §2.7) to
+   let `RegionalTotals` query EIA's US zones; the route's SQL already grouped by
+   `(source, zone, asset_id, metric)` per row, so no query logic changed, only the Zod gate.
+2. **The USA regional-mix chart from §2.8 rendered nothing** — not a code bug, an operational
+   gap: the running `apps/ingest` binary and the `persist`/`api` Node processes were all *stale*,
+   built/started before §2.8's code landed. Rebuilding `apps/ingest` and restarting it published
+   real EIA RTO readings, but they were immediately rejected and routed to the real Kafka
+   `readings.dlq` topic (confirmed by inspecting the DLQ directly with `rpk topic consume`) —
+   the still-running `persist` consumer (`tsx watch`, started hours earlier) had `packages/contracts`
+   loaded in memory from before the new zone enum values existed, and `tsx watch` does not appear
+   to pick up changes to a workspace-linked dependency, only the entrypoint file. Fixed by
+   rebuilding `packages/contracts` and restarting `apps/consumer`'s persist group and `apps/api`
+   (also stale), then re-running the ingest poll once the consumer could actually validate the new
+   zones. **Lesson for future contract/schema changes in this repo:** editing `packages/contracts`
+   requires restarting every long-running `tsx watch` process (`apps/consumer`, `apps/api`), not
+   just `apps/ingest` — `next dev`'s Turbopack does watch workspace packages correctly and did not
+   need a restart.
+3. **A USA per-plant leaderboard (mirroring `PlantLeaderboard`) does not exist and is not a bug**:
+   `PlantLeaderboard`/`GET /generation-top-assets` are ONS-only by design (§2.7) because only ONS
+   readings carry a per-plant `asset_id` — EIA's fuel-type-data is respondent/zone-level only, with
+   no individual generator granularity. A capacity-based analog (ranking EIA-860's *registered*
+   generator capacity instead of live output) is possible but is a materially different metric
+   (installed capacity vs. observed generation) and was left for a explicit decision rather than
+   silently building it under the same "leaderboard" framing.
+
 ## 3. Why
 
 - A separate `live` group lets browser delivery move independently from idempotent persistence;

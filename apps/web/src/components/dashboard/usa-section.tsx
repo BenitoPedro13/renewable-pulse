@@ -1,19 +1,13 @@
 "use client";
 
-import type { Metric, Zone } from "@renewable-pulse/contracts";
+import type { Metric } from "@renewable-pulse/contracts";
 import { DiurnalPatternChart } from "@/components/dashboard/diurnal-pattern-chart";
 import { GenerationMixChart } from "@/components/dashboard/generation-mix-chart";
 import { RegionalMixChart } from "@/components/dashboard/regional-mix-chart";
 import { VolatilityChart } from "@/components/dashboard/volatility-chart";
 import { GENERATION_SHARE_LABEL, useGenerationShare } from "@/hooks/use-generation-share";
 import { useFixedDateRange } from "@/hooks/use-fixed-date-range";
-
-// The seven RTO/ISO respondents added for regional depth
-// (docs/tasks/TASK-live-dashboard.md §2.8) — deliberately excludes
-// "US-US48", which is the sum of these regions (and others EIA does not
-// break out), so it doesn't appear as one more "region" alongside the sums
-// it already contains.
-const USA_REGIONAL_ZONES: Zone[] = ["US-CISO", "US-ERCO", "US-ISNE", "US-MISO", "US-NYIS", "US-PJM", "US-SWPP"];
+import { USA_REGIONAL_ZONES } from "@/lib/zones";
 
 function CurrentShare() {
   const { from, to } = useFixedDateRange(7);

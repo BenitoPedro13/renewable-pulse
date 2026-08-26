@@ -27,7 +27,7 @@ function markerSizePx(installedCapacityKw: number | null, maxCapacityKw: number)
   return MIN_MARKER_PX + ratio * (MAX_MARKER_PX - MIN_MARKER_PX);
 }
 
-const SOURCES: { source: PlantRegistrySource; label: string; view: { longitude: number; latitude: number; zoom: number } }[] = [
+export const PLANT_MAP_SOURCES: { source: PlantRegistrySource; label: string; view: { longitude: number; latitude: number; zoom: number } }[] = [
   { source: "ANEEL_SIGA", label: "Brazil (ANEEL)", view: { longitude: -51.9, latitude: -14.2, zoom: 3.2 } },
   { source: "EIA_860", label: "USA (EIA Form 860)", view: { longitude: -98.5, latitude: 39.8, zoom: 3.2 } },
 ];
@@ -58,71 +58,34 @@ function PlantPopup({ plant, onClose }: { plant: Plant; onClose: () => void }) {
  * Mapbox token is configured; otherwise shows the real plant count instead
  * of a fabricated map, since react-map-gl needs a real per-account
  * credential this repo can't invent.
+ *
+ * `source` is a controlled prop (lifted to PlantMapSection) rather than
+ * internal state: a sibling per-zone totals panel needs to switch country
+ * in lockstep with the map, which an internally-owned toggle couldn't
+ * drive (docs/tasks/TASK-live-dashboard.md §2.9).
  */
-export function PlantMap() {
-  const [source, setSource] = useState<PlantRegistrySource>("ANEEL_SIGA");
+export function PlantMap({ source }: { source: PlantRegistrySource }) {
   const { data, isPending, isError, error } = usePlants(source);
   const [selected, setSelected] = useState<Plant | null>(null);
-  const activeSource = SOURCES.find((s) => s.source === source) ?? SOURCES[0];
+  const activeSource = PLANT_MAP_SOURCES.find((s) => s.source === source) ?? PLANT_MAP_SOURCES[0];
 
-  const sourceTabs = (
-    <div className="flex gap-1">
-      {SOURCES.map((s) => (
-        <button
-          key={s.source}
-          type="button"
-          onClick={() => {
-            setSource(s.source);
-            setSelected(null);
-          }}
-          className={`rounded-full px-3 py-1 text-paragraph-xs ${
-            s.source === source ? "bg-primary-base text-static-white" : "bg-bg-weak-50 text-text-sub-600"
-          }`}
-          aria-pressed={s.source === source}
-        >
-          {s.label}
-        </button>
-      ))}
-    </div>
-  );
-
-  if (isPending) {
-    return (
-      <div className="flex flex-col gap-2">
-        {sourceTabs}
-        <p className="text-paragraph-sm text-text-sub-600">Loading plant registry…</p>
-      </div>
-    );
-  }
+  if (isPending) return <p className="text-paragraph-sm text-text-sub-600">Loading plant registry…</p>;
 
   if (isError) {
-    return (
-      <div className="flex flex-col gap-2">
-        {sourceTabs}
-        <p className="text-paragraph-sm text-error-base">Plant registry unavailable: {error instanceof Error ? error.message : "unknown error"}</p>
-      </div>
-    );
+    return <p className="text-paragraph-sm text-error-base">Plant registry unavailable: {error instanceof Error ? error.message : "unknown error"}</p>;
   }
 
   if (data.unavailable) {
-    return (
-      <div className="flex flex-col gap-2">
-        {sourceTabs}
-        <p className="text-paragraph-sm text-error-base">{activeSource.label} registry is currently unreachable — no cached data available.</p>
-      </div>
-    );
+    return <p className="text-paragraph-sm text-error-base">{activeSource.label} registry is currently unreachable — no cached data available.</p>;
   }
 
   if (!MAPBOX_TOKEN) {
     return (
-      <div className="flex flex-col gap-2">
-        {sourceTabs}
-        <div className="flex flex-col gap-1 rounded-2xl border border-stroke-soft-200 bg-bg-weak-50 p-4">
-          <p className="text-paragraph-sm text-text-sub-600">
-            {data.plants.length.toLocaleString()} real plants loaded from {data.attribution}, but no map is rendered:
-            NEXT_PUBLIC_MAPBOX_TOKEN is not configured.
-          </p>
-        </div>
+      <div className="flex flex-col gap-1 rounded-2xl border border-stroke-soft-200 bg-bg-weak-50 p-4">
+        <p className="text-paragraph-sm text-text-sub-600">
+          {data.plants.length.toLocaleString()} real plants loaded from {data.attribution}, but no map is rendered: NEXT_PUBLIC_MAPBOX_TOKEN is not
+          configured.
+        </p>
       </div>
     );
   }
@@ -131,7 +94,6 @@ export function PlantMap() {
 
   return (
     <div className="flex flex-col gap-2">
-      {sourceTabs}
       <div className="h-96 w-full overflow-hidden rounded-2xl border border-stroke-soft-200">
         <Map key={source} mapboxAccessToken={MAPBOX_TOKEN} initialViewState={activeSource.view} mapStyle="mapbox://styles/mapbox/light-v11">
           {data.plants.map((plant) => {

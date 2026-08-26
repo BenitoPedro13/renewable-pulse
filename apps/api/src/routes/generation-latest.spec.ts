@@ -45,7 +45,8 @@ beforeAll(async () => {
        ('ONS', 'BR-N', 'AMBA', 'hydro', 78.13, 'MWmed', '2026-08-01T00:00:00Z', '2026-08-01T12:00:00Z', 1),
        ('ONS', 'BR-N', 'AMBA', 'hydro', 91.02, 'MWmed', '2026-08-01T01:00:00Z', '2026-08-01T13:00:00Z', 1),
        ('ONS', 'BR-N', NULL,   'solar', 0,     'MWmed', '2026-08-01T01:00:00Z', '2026-08-01T13:00:00Z', 1),
-       ('ONS', 'BR-NE', 'XYZ', 'wind',  30,    'MWmed', '2026-08-01T00:00:00Z', '2026-08-01T12:00:00Z', 1)`,
+       ('ONS', 'BR-NE', 'XYZ', 'wind',  30,    'MWmed', '2026-08-01T00:00:00Z', '2026-08-01T12:00:00Z', 1),
+       ('EIA', 'US-CISO', NULL, 'wind', 4200,  'MWh',   '2026-08-01T00:00:00Z', '2026-08-01T12:00:00Z', 1)`,
   );
 
   const { generationLatestRoute } = await import("./generation-latest.js");
@@ -84,8 +85,16 @@ describe("GET /generation-latest", () => {
     expect(readings[0]).toMatchObject({ zone: "BR-NE", asset_id: "XYZ" });
   });
 
-  it("returns 400 for a source other than ONS", async () => {
-    const res = await app.inject({ method: "GET", url: "/generation-latest?source=ENTSOE" });
+  it("scopes to the requested source, never mixing ONS and EIA rows or their units in one response", async () => {
+    const res = await app.inject({ method: "GET", url: "/generation-latest?source=EIA&zone=US-CISO" });
+    expect(res.statusCode).toBe(200);
+    const readings = res.json().readings;
+    expect(readings).toHaveLength(1);
+    expect(readings[0]).toMatchObject({ source: "EIA", zone: "US-CISO", unit: "MWh", value: 4200 });
+  });
+
+  it("returns 400 for an unknown source", async () => {
+    const res = await app.inject({ method: "GET", url: "/generation-latest?source=NOT_A_SOURCE" });
     expect(res.statusCode).toBe(400);
   });
 });

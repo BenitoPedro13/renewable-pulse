@@ -1,13 +1,12 @@
 "use client";
 
-import type { Metric, Zone } from "@renewable-pulse/contracts";
-import { zoneSchema } from "@renewable-pulse/contracts";
+import type { Metric } from "@renewable-pulse/contracts";
 import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { useGenerationMix } from "@/hooks/use-generation-mix";
+import { ONS_ZONES } from "@/lib/zones";
 
-const ONS_ZONES = zoneSchema.options.filter((zone): zone is Zone & `BR-${string}` => zone.startsWith("BR-"));
 const DAYS = 14;
 
 const METRIC_ORDER: Metric[] = ["hydro", "wind", "solar", "thermal", "nuclear", "other"];

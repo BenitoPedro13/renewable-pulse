@@ -94,7 +94,13 @@ export const generationShareRowSchema = z.object({
 export const generationShareResponseSchema = z.object({ rows: z.array(generationShareRowSchema) });
 export type GenerationShareResponse = z.infer<typeof generationShareResponseSchema>;
 
-export const generationLatestQuerySchema = z.object({ source: z.literal("ONS"), zone: csvArray(zoneSchema).optional() });
+// source was originally scoped to the literal "ONS" for the Brazil map's
+// subsystem-totals panel; widened to the full sourceSchema so the same
+// panel can show EIA's US regional totals (docs/tasks/TASK-live-dashboard.md
+// §2.8/2.9), mirroring the identical widening already done for
+// /generation-mix in §2.7. The route groups by (source, zone, asset_id,
+// metric) per row, so a source-scoped query still never mixes units.
+export const generationLatestQuerySchema = z.object({ source: sourceSchema, zone: csvArray(zoneSchema).optional() });
 export const generationLatestResponseSchema = z.object({ readings: z.array(readingEventSchema) });
 export type GenerationLatestResponse = z.infer<typeof generationLatestResponseSchema>;
 

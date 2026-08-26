@@ -6,6 +6,7 @@ import { BrazilSection } from "@/components/dashboard/brazil-section";
 import { CountryComparisonSection } from "@/components/dashboard/country-comparison-section";
 import { ALL_METRICS, MetricFilterControl } from "@/components/dashboard/metric-filter-control";
 import { PipelineHealthSection } from "@/components/dashboard/pipeline-health-section";
+import { PlantMapSection } from "@/components/dashboard/plant-map-section";
 import { UsaSection } from "@/components/dashboard/usa-section";
 
 /**
@@ -27,6 +28,7 @@ export function DashboardShell() {
       <MetricFilterControl visible={visibleMetrics} onToggle={toggleMetric} />
       <BrazilSection visibleMetrics={visibleMetrics} />
       <UsaSection visibleMetrics={visibleMetrics} />
+      <PlantMapSection />
       <CountryComparisonSection visibleMetrics={visibleMetrics} />
       <PipelineHealthSection />
     </div>
