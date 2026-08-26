@@ -290,6 +290,56 @@ to a documented overlap of at least five days, covered by a Go test of the reque
 window. Existing idempotent writes absorb overlap; a short window must not make USA silently look
 current while repeatedly polling no data.
 
+### 2.7 Post-launch expansion, decided 2026-08-26 (user request: "amazing dashboard... more than a
+percentage")
+
+The v1 dashboard (§2.5) undersold the pipeline's actual data depth — 380k+ real hourly readings at
+plant/subsystem granularity, reduced to one share number per country. User asked for genuinely
+deeper real-data visualizations, USA/other-region parity (not Brazil-only), filtering, and more
+statistics, and explicitly authorized proceeding without a stop-and-ask for each item ("trust ur
+judgment, but document your choices").
+
+**Decided and built:**
+- `GET /generation-mix`'s `source` param widened from the literal `"ONS"` to the full
+  `sourceSchema` (verified via two new contract tests) — used for a full generation-type
+  composition comparison (Brazil vs USA), not just the single hydro+wind+solar share number.
+  Each source's own units are still summed/normalized independently, never combined.
+- Real bug found via the browser console (duplicate React marker keys) and fixed at the source:
+  ANEEL SIGA's CKAN resource repeats the same CEG across rows; `apps/api/src/routes/plants.ts`
+  now dedupes by CEG.
+- Plant markers color-coded by real fuel type (ANEEL's `SigTipoGeracao`: UHE/PCH/CGH→hydro,
+  UTE→thermal, EOL→wind, UFV→solar, UTN→nuclear — the same categories ONS's own
+  `nom_tipousina` values already map to), sized by real installed capacity
+  (`MdaPotenciaFiscalizadaKw`, falling back to `MdaPotenciaOutorgadaKw` when a plant hasn't been
+  inspected yet — both real ANEEL fields, added to `plantSchema` as `installedCapacityKw`), with a
+  click-to-inspect popup. A genuinely missing ANEEL decimal field renders as `",00"` (no integer
+  part) rather than being omitted — confirmed live on `MdaGarantiaFisicaKw` — so `plants.ts`'s
+  `num()` helper now treats that as missing rather than parsing it to a false `0`.
+- **USA plant-level map, resolving "why can't I see US points"**: EIA's own Form 860/860M is
+  exposed as a real v2 REST route, `electricity/operating-generator-capacity`, confirmed live
+  (not assumed) — it returns `latitude`/`longitude`/`nameplate-capacity-mw`/`technology` per
+  *generator* (4.3M+ rows across all US generators), so plant-level rows require grouping by
+  `plantid` server-side the same way ANEEL's rows are deduped by CEG.  All 28 real `technology`
+  facet values were fetched from EIA's own facet-metadata endpoint (not guessed) and mapped to the
+  canonical metric enum using the same reasoning already applied to EIA's 16 `fueltype` codes in
+  `TASK-entsoe-eia-pollers.md` §5.1 (combustion variants → `thermal`, `Geothermal`/`Batteries`/
+  `Flywheels`/`All Other`/null → `other`, `Hydroelectric Pumped Storage` → `hydro` matching the
+  existing `PS`→hydro precedent). `GET /plants` gains a `source=ANEEL_SIGA|EIA_860` query param
+  (default `ANEEL_SIGA`, preserving existing behavior); `plantsResponseSchema.source` widens from
+  the `"ANEEL_SIGA"` literal to that enum. `EIA_API_KEY` is now read by `apps/api` as well as
+  `apps/ingest` (documented in `.env.example` accordingly) — this route is a live pass-through
+  proxy with an hourly cache, like the existing ANEEL branch, not part of the Kafka
+  ingest/persist pipeline, so no Go or `packages/contracts` event-schema changes are needed.
+
+**Explicitly deferred (bigger, separate scope — not started this session):** EIA balancing-
+authority-level generation (CISO/ERCOT/PJM/MISO/SWPP/...) for a true US-regional mix comparison
+mirroring Brazil's 5 subsystems; ONS reservoir-level (EAR) and marginal-cost (CMO) ingestion;
+ENTSO-E load/cross-border-flow document types (blocked on the same missing API token as the rest
+of ENTSO-E); a shared cross-chart metric filter (hydro/wind/solar/.../other) as its own dashboard
+control; Brazil per-plant leaderboard/volatility/ramp-rate statistics. Each is real, additive, and
+intended for a following session — recorded here so the next session (or continuation) doesn't
+have to re-derive the plan or re-verify the EIA-860 route from scratch.
+
 ## 3. Why
 
 - A separate `live` group lets browser delivery move independently from idempotent persistence;

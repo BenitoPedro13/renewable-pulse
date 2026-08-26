@@ -98,19 +98,31 @@ export const generationLatestQuerySchema = z.object({ source: z.literal("ONS"), 
 export const generationLatestResponseSchema = z.object({ readings: z.array(readingEventSchema) });
 export type GenerationLatestResponse = z.infer<typeof generationLatestResponseSchema>;
 
+export const plantRegistrySourceSchema = z.enum(["ANEEL_SIGA", "EIA_860"]);
+export type PlantRegistrySource = z.infer<typeof plantRegistrySourceSchema>;
+
+/** GET /plants query params. Defaults to ANEEL_SIGA to preserve the original Brazil-only behavior for existing callers. */
+export const plantsQuerySchema = z.object({ source: plantRegistrySourceSchema.optional().default("ANEEL_SIGA") });
+export type PlantsQuery = z.infer<typeof plantsQuerySchema>;
+
 export const plantSchema = z.object({
+  /** The registry's own unique plant identifier — ANEEL's CEG for Brazil, EIA's plantid for the USA. Not the same namespace across sources; only unique within one plantRegistrySource. */
   ceg: z.string(),
   name: z.string(),
   state: z.string(),
   generationType: z.string(),
+  /** Canonical metric, mapped server-side from the source's own fuel-type vocabulary (ANEEL's SigTipoGeracao or EIA's technology) — the same categories apps/ingest maps ONS/ENTSO-E/EIA generation readings to, so map markers use the one dashboard-wide palette regardless of registry source. */
+  metric: metricSchema,
   phase: z.string().nullable(),
   fuelOrigin: z.string().nullable(),
   latitude: z.number(),
   longitude: z.number(),
+  /** Real registry capacity, not a live output reading. ANEEL: MdaPotenciaFiscalizadaKw (inspected), falling back to MdaPotenciaOutorgadaKw (granted) when not yet inspected. EIA: nameplate-capacity-mw, summed across a plant's generators, converted to kW for a single cross-source unit. */
+  installedCapacityKw: z.number().nullable(),
 });
 export type Plant = z.infer<typeof plantSchema>;
 export const plantsResponseSchema = z.object({
-  source: z.literal("ANEEL_SIGA"),
+  source: plantRegistrySourceSchema,
   attribution: z.string(),
   unavailable: z.boolean(),
   plants: z.array(plantSchema),
