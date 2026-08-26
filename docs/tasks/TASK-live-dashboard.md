@@ -331,14 +331,36 @@ judgment, but document your choices").
   proxy with an hourly cache, like the existing ANEEL branch, not part of the Kafka
   ingest/persist pipeline, so no Go or `packages/contracts` event-schema changes are needed.
 
+**Also built this session:**
+- A real bug in `apps/web/src/lib/queries/generation-mix.ts`: the `source` param was hardcoded to
+  `"ONS"` even after the route/schema were widened above, so `CompositionComparisonChart`'s USA
+  branch was silently querying `source=ONS&zone=US-US48` (zero rows) instead of EIA. Fixed by
+  making `source` a required param on `useGenerationMix`/`GenerationMixParams` — TypeScript then
+  caught every call site that needed updating, including one other real instance of the same bug
+  in `RegionalMixChart`.
+- `GenerationMixChart` and `DiurnalPatternChart` generalized to take `source`/`zones`/`label`
+  props instead of hardcoding ONS's five subsystems, so the same components render both Brazil's
+  and USA's charts — no duplicated per-country chart files.
+- A new `UsaSection` (mirrors `BrazilSection` minus the map/regional-mix, which need the deferred
+  balancing-authority ingestion below) with its own current-share number, generation-mix chart, and
+  diurnal-pattern chart, all real EIA/US48 data.
+- A shared cross-chart metric filter (`MetricFilterControl` + `DashboardShell`, which now owns the
+  `visibleMetrics` state via plain `useState` per CLAUDE.md's state-management ladder — this
+  changes only on a click, not every tick, so it doesn't earn a Zustand store) — toggling hides/
+  shows series client-side across every chart at once without refetching.
+- `useFixedDateRange`, a shared hook replacing five near-identical local `useState(() => ({from,
+  to}))` implementations across chart components.
+
 **Explicitly deferred (bigger, separate scope — not started this session):** EIA balancing-
 authority-level generation (CISO/ERCOT/PJM/MISO/SWPP/...) for a true US-regional mix comparison
-mirroring Brazil's 5 subsystems; ONS reservoir-level (EAR) and marginal-cost (CMO) ingestion;
-ENTSO-E load/cross-border-flow document types (blocked on the same missing API token as the rest
-of ENTSO-E); a shared cross-chart metric filter (hydro/wind/solar/.../other) as its own dashboard
-control; Brazil per-plant leaderboard/volatility/ramp-rate statistics. Each is real, additive, and
-intended for a following session — recorded here so the next session (or continuation) doesn't
-have to re-derive the plan or re-verify the EIA-860 route from scratch.
+mirroring Brazil's 5 subsystems (also needed for a real US-regional map, since EIA-860's own
+per-plant technology field only gives a fuel type, not a demand-side breakdown); ONS
+reservoir-level (EAR) and marginal-cost (CMO) ingestion; ENTSO-E load/cross-border-flow document
+types (blocked on the same missing API token as the rest of ENTSO-E); Brazil per-plant
+leaderboard/volatility/ramp-rate statistics; a pipeline-transparency panel (data provenance,
+ingestion throughput, DLQ viewer). Each is real, additive, and intended for a following session —
+recorded here so the next session (or continuation) doesn't have to re-derive the plan or
+re-verify the EIA-860 route from scratch.
 
 ## 3. Why
 

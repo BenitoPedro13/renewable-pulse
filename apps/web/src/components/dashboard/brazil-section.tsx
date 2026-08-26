@@ -1,24 +1,19 @@
 "use client";
 
+import type { Metric, Zone } from "@renewable-pulse/contracts";
+import { zoneSchema } from "@renewable-pulse/contracts";
 import { GENERATION_SHARE_LABEL, useGenerationShare } from "@/hooks/use-generation-share";
 import { useGenerationLatest } from "@/hooks/use-generation-latest";
-import { useState } from "react";
+import { useFixedDateRange } from "@/hooks/use-fixed-date-range";
 import { DiurnalPatternChart } from "@/components/dashboard/diurnal-pattern-chart";
 import { GenerationMixChart } from "@/components/dashboard/generation-mix-chart";
 import { PlantMap } from "@/components/dashboard/plant-map";
 import { RegionalMixChart } from "@/components/dashboard/regional-mix-chart";
 
-function useDateRange(days: number) {
-  const [range] = useState(() => {
-    const to = new Date();
-    const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
-    return { from: from.toISOString(), to: to.toISOString() };
-  });
-  return range;
-}
+const ONS_ZONES = zoneSchema.options.filter((zone): zone is Zone & `BR-${string}` => zone.startsWith("BR-"));
 
 function CurrentShare() {
-  const { from, to } = useDateRange(7);
+  const { from, to } = useFixedDateRange(7);
   const { data, isPending } = useGenerationShare({ sources: ["ONS"], from, to });
   const latest = data?.rows.at(-1);
 
@@ -62,7 +57,7 @@ function SubsystemTotals() {
   );
 }
 
-export function BrazilSection() {
+export function BrazilSection({ visibleMetrics }: { visibleMetrics: Metric[] }) {
   return (
     <section aria-labelledby="brazil-heading" className="flex flex-col gap-4">
       <h2 id="brazil-heading" className="text-label-lg text-text-strong-950">
@@ -70,10 +65,10 @@ export function BrazilSection() {
       </h2>
       <CurrentShare />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <GenerationMixChart />
-        <RegionalMixChart />
+        <GenerationMixChart source="ONS" zones={ONS_ZONES} label="all subsystems" visibleMetrics={visibleMetrics} />
+        <RegionalMixChart visibleMetrics={visibleMetrics} />
       </div>
-      <DiurnalPatternChart />
+      <DiurnalPatternChart source="ONS" zones={ONS_ZONES} label="all subsystems" visibleMetrics={visibleMetrics} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <PlantMap />
         <SubsystemTotals />

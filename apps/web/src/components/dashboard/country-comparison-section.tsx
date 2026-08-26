@@ -1,6 +1,6 @@
 "use client";
 
-import type { GenerationShareResponse, Source } from "@renewable-pulse/contracts";
+import type { GenerationShareResponse, Metric, Source } from "@renewable-pulse/contracts";
 import { useState } from "react";
 import { CompositionComparisonChart } from "@/components/dashboard/composition-comparison-chart";
 import { GENERATION_SHARE_LABEL, useGenerationShare } from "@/hooks/use-generation-share";
@@ -63,7 +63,7 @@ function CountryCard({ country, grid, row }: { country: string; grid: string; ro
  * renders "No verified readings yet" rather than a placeholder series
  * (docs/tasks/TASK-live-dashboard.md §2.5.2).
  */
-export function CountryComparisonSection() {
+export function CountryComparisonSection({ visibleMetrics }: { visibleMetrics: Metric[] }) {
   const { from, to } = useDateRange(30);
   const { data, isPending, isError, error } = useGenerationShare({ sources: ["ONS", "ENTSOE", "EIA"], from, to });
 
@@ -89,7 +89,7 @@ export function CountryComparisonSection() {
           <CountryCard key={source} country={country} grid={grid} row={latestRowFor(data.rows, source)} />
         ))}
       </div>
-      <CompositionComparisonChart />
+      <CompositionComparisonChart visibleMetrics={visibleMetrics} />
     </section>
   );
 }

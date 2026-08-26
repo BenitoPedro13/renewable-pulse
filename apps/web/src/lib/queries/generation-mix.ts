@@ -1,8 +1,9 @@
-import { generationMixResponseSchema, type GenerationMixResponse, type Zone } from "@renewable-pulse/contracts";
+import { generationMixResponseSchema, type GenerationMixResponse, type Source, type Zone } from "@renewable-pulse/contracts";
 import { queryOptions } from "@tanstack/react-query";
 import { apiFetch } from "../api";
 
 export interface GenerationMixParams {
+  source: Source;
   zones: Zone[];
   from: string;
   to: string;
@@ -18,7 +19,7 @@ export const generationMixCache = {
       queryKey: generationMixCache.key(params),
       queryFn: async (): Promise<GenerationMixResponse> => {
         const search = new URLSearchParams({
-          source: "ONS",
+          source: params.source,
           zone: params.zones.join(","),
           from: params.from,
           to: params.to,

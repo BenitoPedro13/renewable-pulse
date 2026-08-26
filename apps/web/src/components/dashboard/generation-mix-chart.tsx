@@ -1,14 +1,10 @@
 "use client";
 
-import type { Metric } from "@renewable-pulse/contracts";
-import { zoneSchema } from "@renewable-pulse/contracts";
-import { useState } from "react";
+import type { Metric, Source, Zone } from "@renewable-pulse/contracts";
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { useGenerationMix } from "@/hooks/use-generation-mix";
-
-const ONS_ZONES = zoneSchema.options.filter((zone) => zone.startsWith("BR-"));
-const DAYS = 14;
+import { useFixedDateRange } from "@/hooks/use-fixed-date-range";
 
 const METRIC_ORDER: Metric[] = ["hydro", "wind", "solar", "thermal", "nuclear", "other"];
 
@@ -22,18 +18,9 @@ const chartConfig = {
   other: { label: "Other", color: "var(--chart-5)" },
 } satisfies ChartConfig;
 
-function useDateRange(days: number) {
-  const [range] = useState(() => {
-    const to = new Date();
-    const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
-    return { from: from.toISOString(), to: to.toISOString() };
-  });
-  return range;
-}
-
 type ChartRow = { bucketStart: string } & Partial<Record<Metric, number>>;
 
-/** Sums generation-mix rows across all five ONS subsystems (same source/unit, so summing is valid) into one national row per bucket/metric, for Recharts' one-object-per-x-value shape. */
+/** Sums generation-mix rows across every requested zone (same source/unit, so summing is valid) into one row per bucket/metric, for Recharts' one-object-per-x-value shape. */
 function toChartRows(rows: { bucketStart: string; metric: Metric; value: number }[]): ChartRow[] {
   const byBucket = new Map<string, ChartRow>();
   for (const row of rows) {
@@ -45,13 +32,28 @@ function toChartRows(rows: { bucketStart: string; metric: Metric; value: number 
 }
 
 /**
- * National (all five ONS subsystems summed) stacked-area generation mix,
- * preserving the MWmed unit label per docs/tasks/TASK-live-dashboard.md
- * §2.1 — never mixed with ENTSO-E's MAW or EIA's MWh.
+ * Stacked-area generation mix for one source, summed across every requested
+ * zone, preserving that source's own unit label per docs/tasks/
+ * TASK-live-dashboard.md §2.1 — never mixed with another source's unit.
+ * `visibleMetrics` comes from the shared MetricFilterControl
+ * (DashboardShell) and only hides/shows series client-side — the query
+ * itself still fetches every metric, so toggling the filter never refetches.
  */
-export function GenerationMixChart() {
-  const { from, to } = useDateRange(DAYS);
-  const { data, isPending, isError, error } = useGenerationMix({ zones: ONS_ZONES, from, to, bucket: "day" });
+export function GenerationMixChart({
+  source,
+  zones,
+  label,
+  days = 14,
+  visibleMetrics = METRIC_ORDER,
+}: {
+  source: Source;
+  zones: Zone[];
+  label: string;
+  days?: number;
+  visibleMetrics?: Metric[];
+}) {
+  const { from, to } = useFixedDateRange(days);
+  const { data, isPending, isError, error } = useGenerationMix({ source, zones, from, to, bucket: "day" });
 
   if (isPending) {
     return <p className="text-paragraph-sm text-text-sub-600">Loading generation mix…</p>;
@@ -66,17 +68,19 @@ export function GenerationMixChart() {
   }
 
   if (data.rows.length === 0) {
-    return <p className="text-paragraph-sm text-text-soft-400">No real ONS readings in the last {DAYS} days.</p>;
+    return <p className="text-paragraph-sm text-text-soft-400">No real {source} readings in the last {days} days.</p>;
   }
 
-  const unit = data.rows[0]?.unit ?? "MWmed";
+  const unit = data.rows[0]?.unit ?? "";
   const chartRows = toChartRows(data.rows);
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between">
         <h3 className="text-label-sm text-text-strong-950">Generation mix ({unit})</h3>
-        <span className="text-paragraph-xs text-text-soft-400">last {DAYS} days, all subsystems</span>
+        <span className="text-paragraph-xs text-text-soft-400">
+          last {days} days, {label}
+        </span>
       </div>
       <ChartContainer config={chartConfig} className="aspect-auto h-64 w-full">
         <AreaChart data={chartRows}>
@@ -88,7 +92,7 @@ export function GenerationMixChart() {
             axisLine={false}
           />
           <ChartTooltip content={<ChartTooltipContent labelFormatter={(value) => new Date(value as string).toLocaleDateString()} />} />
-          {METRIC_ORDER.map((metric) => (
+          {METRIC_ORDER.filter((metric) => visibleMetrics.includes(metric)).map((metric) => (
             <Area
               key={metric}
               dataKey={metric}

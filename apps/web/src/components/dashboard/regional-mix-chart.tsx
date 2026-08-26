@@ -2,9 +2,9 @@
 
 import type { Metric, Zone } from "@renewable-pulse/contracts";
 import { zoneSchema } from "@renewable-pulse/contracts";
-import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { useFixedDateRange } from "@/hooks/use-fixed-date-range";
 import { useGenerationMix } from "@/hooks/use-generation-mix";
 
 const ONS_ZONES = zoneSchema.options.filter((zone): zone is Zone & `BR-${string}` => zone.startsWith("BR-"));
@@ -20,15 +20,6 @@ const chartConfig = {
   nuclear: { label: "Nuclear", color: "var(--chart-5)" },
   other: { label: "Other", color: "var(--chart-5)" },
 } satisfies ChartConfig;
-
-function useDateRange(days: number) {
-  const [range] = useState(() => {
-    const to = new Date();
-    const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
-    return { from: from.toISOString(), to: to.toISOString() };
-  });
-  return range;
-}
 
 type ZoneRow = { zone: string } & Partial<Record<Metric, number>>;
 
@@ -57,9 +48,9 @@ function toZonePercentRows(rows: { zone: string; metric: Metric; value: number }
  * far more wind) — a national total hides that. One 100%-stacked bar per
  * subsystem, in % rather than raw MWmed, makes the comparison direct.
  */
-export function RegionalMixChart() {
-  const { from, to } = useDateRange(DAYS);
-  const { data, isPending, isError, error } = useGenerationMix({ zones: ONS_ZONES, from, to, bucket: "day" });
+export function RegionalMixChart({ visibleMetrics = METRIC_ORDER }: { visibleMetrics?: Metric[] }) {
+  const { from, to } = useFixedDateRange(DAYS);
+  const { data, isPending, isError, error } = useGenerationMix({ source: "ONS", zones: ONS_ZONES, from, to, bucket: "day" });
 
   if (isPending) return <p className="text-paragraph-sm text-text-sub-600">Loading regional mix…</p>;
   if (isError) {
@@ -81,7 +72,7 @@ export function RegionalMixChart() {
           <XAxis type="number" domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} tickLine={false} axisLine={false} />
           <YAxis type="category" dataKey="zone" tickLine={false} axisLine={false} width={56} />
           <ChartTooltip content={<ChartTooltipContent formatter={(value) => `${Number(value).toFixed(1)}%`} />} />
-          {METRIC_ORDER.map((metric) => (
+          {METRIC_ORDER.filter((metric) => visibleMetrics.includes(metric)).map((metric) => (
             <Bar key={metric} dataKey={metric} stackId="mix" fill={`var(--color-${metric})`} radius={0} />
           ))}
         </BarChart>

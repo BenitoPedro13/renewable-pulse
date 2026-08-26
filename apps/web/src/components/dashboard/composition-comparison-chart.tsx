@@ -50,10 +50,10 @@ function toPercentRow(country: string, rows: { metric: Metric; value: number }[]
  * where each grid's non-renewable share actually comes from (US48 leans
  * heavily thermal/nuclear where Brazil leans hydro).
  */
-export function CompositionComparisonChart() {
+export function CompositionComparisonChart({ visibleMetrics = METRIC_ORDER }: { visibleMetrics?: Metric[] }) {
   const { from, to } = useDateRange(DAYS);
-  const ons = useGenerationMix({ zones: ONS_ZONES, from, to, bucket: "day" });
-  const eia = useGenerationMix({ zones: ["US-US48"], from, to, bucket: "day" });
+  const ons = useGenerationMix({ source: "ONS", zones: ONS_ZONES, from, to, bucket: "day" });
+  const eia = useGenerationMix({ source: "EIA", zones: ["US-US48"], from, to, bucket: "day" });
 
   if (ons.isPending || eia.isPending) return <p className="text-paragraph-sm text-text-sub-600">Loading composition comparison…</p>;
   if (ons.isError || eia.isError) {
@@ -78,7 +78,7 @@ export function CompositionComparisonChart() {
           <XAxis type="number" domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} tickLine={false} axisLine={false} />
           <YAxis type="category" dataKey="country" tickLine={false} axisLine={false} width={88} />
           <ChartTooltip content={<ChartTooltipContent formatter={(value) => `${Number(value).toFixed(1)}%`} />} />
-          {METRIC_ORDER.map((metric) => (
+          {METRIC_ORDER.filter((metric) => visibleMetrics.includes(metric)).map((metric) => (
             <Bar key={metric} dataKey={metric} stackId="mix" fill={`var(--color-${metric})`} radius={0} />
           ))}
         </BarChart>

@@ -1,14 +1,11 @@
 "use client";
 
-import type { Metric, Zone } from "@renewable-pulse/contracts";
-import { zoneSchema } from "@renewable-pulse/contracts";
-import { useState } from "react";
+import type { Metric, Source, Zone } from "@renewable-pulse/contracts";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { useFixedDateRange } from "@/hooks/use-fixed-date-range";
 import { useGenerationMix } from "@/hooks/use-generation-mix";
 
-const ONS_ZONES = zoneSchema.options.filter((zone): zone is Zone & `BR-${string}` => zone.startsWith("BR-"));
-const DAYS = 7;
 const METRICS: Metric[] = ["hydro", "solar", "thermal", "wind"];
 
 const chartConfig = {
@@ -18,19 +15,10 @@ const chartConfig = {
   thermal: { label: "Thermal", color: "var(--chart-4)" },
 } satisfies ChartConfig;
 
-function useDateRange(days: number) {
-  const [range] = useState(() => {
-    const to = new Date();
-    const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
-    return { from: from.toISOString(), to: to.toISOString() };
-  });
-  return range;
-}
-
 type HourRow = { hour: number } & Partial<Record<Metric, number>>;
 
 /**
- * Sums across the five ONS subsystems per real hourly reading (same
+ * Sums across every requested zone per real hourly reading (same
  * source/unit), then averages by UTC hour-of-day across every day in the
  * window — a real diurnal shape (solar's midday peak, thermal's evening
  * ramp as solar drops, hydro's flat baseload), not a smoothed/synthetic
@@ -65,10 +53,22 @@ function toDiurnalRows(rows: { bucketStart: string; metric: Metric; value: numbe
   });
 }
 
-/** Average real generation by UTC hour-of-day, over the ONS subsystems combined — the actual diurnal shape (solar peak, thermal evening ramp, hydro baseload) rather than a single daily average. */
-export function DiurnalPatternChart() {
-  const { from, to } = useDateRange(DAYS);
-  const { data, isPending, isError, error } = useGenerationMix({ zones: ONS_ZONES, from, to, bucket: "hour" });
+/** Average real generation by UTC hour-of-day for one source, summed across every requested zone — the actual diurnal shape (solar peak, thermal evening ramp, hydro baseload) rather than a single daily average. */
+export function DiurnalPatternChart({
+  source,
+  zones,
+  label,
+  days = 7,
+  visibleMetrics = METRICS,
+}: {
+  source: Source;
+  zones: Zone[];
+  label: string;
+  days?: number;
+  visibleMetrics?: Metric[];
+}) {
+  const { from, to } = useFixedDateRange(days);
+  const { data, isPending, isError, error } = useGenerationMix({ source, zones, from, to, bucket: "hour" });
 
   if (isPending) return <p className="text-paragraph-sm text-text-sub-600">Loading diurnal pattern…</p>;
   if (isError) {
@@ -77,13 +77,15 @@ export function DiurnalPatternChart() {
   if (data.rows.length === 0) return null;
 
   const rows = toDiurnalRows(data.rows);
-  const unit = data.rows[0]?.unit ?? "MWmed";
+  const unit = data.rows[0]?.unit ?? "";
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between">
         <h3 className="text-label-sm text-text-strong-950">Average generation by hour of day ({unit})</h3>
-        <span className="text-paragraph-xs text-text-soft-400">real hourly readings, averaged over the last {DAYS} days, UTC</span>
+        <span className="text-paragraph-xs text-text-soft-400">
+          real hourly readings, averaged over the last {days} days, UTC, {label}
+        </span>
       </div>
       <ChartContainer config={chartConfig} className="aspect-auto h-56 w-full">
         <LineChart data={rows}>
@@ -91,7 +93,7 @@ export function DiurnalPatternChart() {
           <XAxis dataKey="hour" tickFormatter={(h: number) => `${h}:00`} tickLine={false} axisLine={false} interval={2} />
           <YAxis tickLine={false} axisLine={false} width={48} />
           <ChartTooltip content={<ChartTooltipContent labelFormatter={(h) => `${h}:00 UTC`} />} />
-          {METRICS.map((metric) => (
+          {METRICS.filter((metric) => visibleMetrics.includes(metric)).map((metric) => (
             <Line key={metric} dataKey={metric} type="monotone" stroke={`var(--color-${metric})`} dot={false} strokeWidth={2} />
           ))}
         </LineChart>

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { generationMixCache, type GenerationMixParams } from "@/lib/queries/generation-mix";
 
-/** ONS generation-mix rows for the Brazil stacked-area chart — GET /generation-mix. Preserves the source's own MWmed unit; never sums across units. */
+/** Generation-mix rows for any single source — GET /generation-mix. Preserves that source's own unit (ONS=MWmed, EIA=MWh); never sums across units or sources. */
 export function useGenerationMix(params: GenerationMixParams) {
   return useQuery(generationMixCache.options(params));
 }
