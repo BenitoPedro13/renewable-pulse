@@ -8,19 +8,28 @@ import (
 	"github.com/BenitoPedro13/renewable-pulse/apps/ingest/internal/event"
 )
 
-// metricByFuelType maps EIA-930's fixed 8-code fuel-type facet
-// (docs/tasks/TASK-entsoe-eia-pollers.md §1) to our canonical metric. Unlike
-// ENTSO-E's finer-grained psrType, all 8 codes are mapped — none are left
-// for the DLQ.
+// metricByFuelType maps EIA-930's fuel-type facet to our canonical metric.
+// The facet has 16 codes, not the 8 originally assumed — confirmed via a
+// live poll and EIA's own facet-metadata endpoint
+// (docs/tasks/TASK-entsoe-eia-pollers.md §5.1). All 16 are mapped; none are
+// left for the DLQ.
 var metricByFuelType = map[string]string{
 	"COL": event.MetricThermal,
 	"NG":  event.MetricThermal,
 	"OIL": event.MetricThermal,
 	"NUC": event.MetricNuclear,
 	"WAT": event.MetricHydro,
+	"PS":  event.MetricHydro, // Pumped Storage — turbine-driven hydro generation
 	"SUN": event.MetricSolar,
+	"SNB": event.MetricSolar, // Solar with integrated battery storage
 	"WND": event.MetricWind,
+	"WNB": event.MetricWind, // Wind with integrated battery storage
 	"OTH": event.MetricOther,
+	"BAT": event.MetricOther, // Battery / Battery storage (standalone)
+	"OES": event.MetricOther, // Other energy storage
+	"UES": event.MetricOther, // Unknown/unknown energy storage
+	"UNK": event.MetricOther, // Unknown
+	"GEO": event.MetricOther, // Geothermal — doesn't fit the five named categories
 }
 
 // Normalize maps one EIA fuel-type-data row to the canonical reading event.

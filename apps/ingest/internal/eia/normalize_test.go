@@ -43,15 +43,38 @@ func TestNormalize_MapsWindRow(t *testing.T) {
 	}
 }
 
-func TestNormalize_AllEightFuelTypeCodesAreMapped(t *testing.T) {
+func TestNormalize_AllSixteenFuelTypeCodesAreMapped(t *testing.T) {
 	for code := range metricByFuelType {
 		row := dataRow{Period: "2026-08-26T05", Respondent: "US48", FuelType: code, Value: "1"}
 		if _, err := Normalize(row, ingestedAt); err != nil {
 			t.Errorf("fueltype %q: unexpected error: %v", code, err)
 		}
 	}
-	if len(metricByFuelType) != 8 {
-		t.Errorf("want 8 mapped fuel types, got %d", len(metricByFuelType))
+	if len(metricByFuelType) != 16 {
+		t.Errorf("want 16 mapped fuel types, got %d", len(metricByFuelType))
+	}
+}
+
+func TestNormalize_MapsStorageAndHybridFuelTypes(t *testing.T) {
+	cases := map[string]string{
+		"PS":  event.MetricHydro,
+		"SNB": event.MetricSolar,
+		"WNB": event.MetricWind,
+		"BAT": event.MetricOther,
+		"OES": event.MetricOther,
+		"UES": event.MetricOther,
+		"UNK": event.MetricOther,
+		"GEO": event.MetricOther,
+	}
+	for code, want := range cases {
+		row := dataRow{Period: "2026-08-26T05", Respondent: "US48", FuelType: code, Value: "1"}
+		reading, err := Normalize(row, ingestedAt)
+		if err != nil {
+			t.Fatalf("fueltype %q: unexpected error: %v", code, err)
+		}
+		if reading.Metric != want {
+			t.Errorf("fueltype %q: want metric=%q, got %q", code, want, reading.Metric)
+		}
 	}
 }
 

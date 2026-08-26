@@ -141,10 +141,13 @@ as `YYYY-MM-DDTHH`, `sort[0][column]=period`, `sort[0][direction]=desc`, `offset
 (max 5000/page). Respondent scope for v1: `US48` (EIA's own code for the national Lower-48
 aggregate) — **not** `CAISO`/`CISO`, deviating from this doc's earlier `US-CAISO` zone example
 below, which used an invented respondent code; a single national aggregate is also the more
-direct fit for the country-comparison view than one specific state ISO. `fueltype` facet codes
-for this route (confirmed set): `COL`, `NG`, `NUC`, `OIL`, `WAT`, `SUN`, `WND`, `OTH` — mapped to
-canonical `metric`: `COL`/`NG`/`OIL` → `thermal`, `NUC` → `nuclear`, `WAT` → `hydro`, `SUN` →
-`solar`, `WND` → `wind`, `OTH` → `other`; all 8 codes are mapped, nothing left for the DLQ.
+direct fit for the country-comparison view than one specific state ISO. `fueltype` facet has 16
+codes, not the 8 originally assumed here — confirmed via a live poll and EIA's own facet-metadata
+endpoint (`docs/tasks/TASK-entsoe-eia-pollers.md` §5.1): `COL`/`NG`/`OIL` → `thermal`, `NUC` →
+`nuclear`, `WAT`/`PS` (Pumped Storage) → `hydro`, `SUN`/`SNB` (Solar w/ integrated battery) →
+`solar`, `WND`/`WNB` (Wind w/ integrated battery) → `wind`, `OTH`/`BAT`/`OES`/`UES`/`UNK`/`GEO`
+(standalone storage, unknown, geothermal) → `other`; all 16 codes are mapped, nothing left for
+the DLQ.
 Response envelope: `{ response: { data: [ { period, respondent, fueltype, value, ... } ] } }`,
 `period` as `YYYY-MM-DDTHH` (UTC hour) → `recorded_at`. Unit is `megawatthours`, stored as `MWh`
 — an **hourly energy total, not a power reading**, a real difference from ONS's `MWmed` and

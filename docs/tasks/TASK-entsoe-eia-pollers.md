@@ -85,10 +85,11 @@ domain-specific facet/unit details:
   renewable share) than one specific state ISO. `docs/architecture.md` is updated to reflect this.
   Extending to specific balancing authorities (e.g. `CISO`, `ERCO`) is a future scope increase, not
   done here.
-- **`fueltype` facet codes for this route** (confirmed set, per EIA-930 program docs): `COL`, `NG`,
-  `NUC`, `OIL`, `WAT`, `SUN`, `WND`, `OTH` — mapped to canonical `metric`: `COL`/`NG`/`OIL` →
-  `thermal`, `NUC` → `nuclear`, `WAT` → `hydro`, `SUN` → `solar`, `WND` → `wind`, `OTH` → `other`.
-  All 8 codes are mapped; nothing left unmapped for this source.
+- **`fueltype` facet codes for this route** — **superseded by live verification, see §5.1**: the EIA-930
+  program docs implied a fixed 8-code set (`COL`, `NG`, `NUC`, `OIL`, `WAT`, `SUN`, `WND`, `OTH`), but
+  a live poll against the real API on 2026-08-26 returned 16 distinct codes. The original 8 keep their
+  mapping (`COL`/`NG`/`OIL` → `thermal`, `NUC` → `nuclear`, `WAT` → `hydro`, `SUN` → `solar`,
+  `WND` → `wind`, `OTH` → `other`); the 8 discovered live are mapped in §5.1.
 - **Response envelope:** `{ response: { data: [ { period, respondent, fueltype, value, ... } ] } }`.
   `period` is `YYYY-MM-DDTHH` (the UTC hour) → `recorded_at`. `value` is a numeric string; unit is
   `megawatthours` per EIA-930's own docs (an **hourly energy total, not an instantaneous/average power
@@ -150,8 +151,39 @@ external email round-trip.
 - `go test ./...` in `apps/ingest` passes, including new `entsoe`/`eia` normalize tests built from
   realistic fixtures matching the confirmed request/response shapes above.
 - ONS's existing poller and tests are unaffected (no changes to `internal/ons`).
-- **Still open, not done in this task**: a live run of `apps/ingest` against the real ENTSO-E and EIA
-  APIs once the user has both credentials, to confirm the resolved shapes above against an actual
-  captured response (matching this project's "provider shape tested from a real response" rule) — the
-  same rigor Phase 1 applied to ONS via the 366k-row live poll
-  (`docs/tasks/TASK-ingest-spine.md` §6). Follow-up task, not blocking this one's commit.
+- **Still open**: ENTSO-E live verification, blocked on the API token (requested 2026-08-26 via email
+  to `transparency@entsoe.eu`, ~3 business day turnaround). Follow-up once the token arrives.
+
+### 5.1 EIA live verification — done 2026-08-26
+
+The user registered for an EIA key (`eia.gov/opendata`, instant) and it was used to hit the real
+`fuel-type-data` endpoint. Two findings, both from actual API responses, not assumption:
+
+1. **The endpoint works as documented in §1** — a 5-day window against `US48` returned 1728 rows
+   with the expected envelope shape (`response.data[]` with `period`/`respondent`/`fueltype`/`value`).
+   A window narrower than ~1 day returned 0 rows — EIA-930 hourly data has a reporting lag of roughly
+   a day; not a bug, just means `eiaLookback` (currently 2h in `main.go`) will often see a thin or
+   empty window in production. Left as-is for this task (doesn't fail or duplicate, just yields fewer
+   rows than expected) — worth revisiting if Phase 4's dashboard needs fresher EIA data than that
+   lookback reliably delivers.
+2. **The `fueltype` facet has 16 codes, not the 8 assumed in §1**, confirmed against EIA's own facet
+   metadata endpoint (`GET .../fuel-type-data/facet/fueltype/`, which returns authoritative
+   `{id, name}` labels — not inferred from generation values). The 8 new ones and their mapping:
+
+   | Code | EIA's label | → canonical `metric` | Reasoning |
+   |---|---|---|---|
+   | `PS` | Pumped Storage | `hydro` | Turbine-driven hydro generation; EIA buckets it apart from `WAT` for its dual generation/pumping accounting, but the physical generation is hydro. |
+   | `SNB` | Solar with integrated battery storage | `solar` | Generation is solar-sourced; the battery is co-located storage, not a separate generation source. |
+   | `WNB` | Wind with integrated battery storage | `wind` | Same reasoning as `SNB`, for wind. |
+   | `BAT` | Battery / Battery storage | `other` | Standalone storage discharge, not tied to one generation source. |
+   | `OES` | Other energy storage | `other` | Same as `BAT`. |
+   | `UES` | Unknown/unknown energy storage | `other` | Same as `BAT`. |
+   | `UNK` | Unknown | `other` | No claim possible about generation source. |
+   | `GEO` | Geothermal | `other` | Doesn't fit any of the five named categories; falls to the same bucket ENTSO-E's `B09` geothermal would if it appeared (see §1's ENTSO-E table). |
+
+   Before this fix, every `BAT`/`GEO`/`OES`/`PS`/`SNB`/`UES`/`UNK`/`WNB` row was silently skipped
+   (`Normalize` returning "unmapped fueltype", logged and dropped by `main.go`) on every single poll —
+   not a DLQ case (these never left the ingest process to reach Redpanda), but a real, permanent gap
+   in what fraction of US48's actual generation the pipeline captured. Fixed in
+   `apps/ingest/internal/eia/normalize.go`'s `metricByFuelType` map; `normalize_test.go` extended to
+   cover all 16 codes.
