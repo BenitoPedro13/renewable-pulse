@@ -186,8 +186,8 @@ func pollEntsoeFn(token string) func(ctx context.Context, pub *publish.Publisher
 	}
 }
 
-// eiaLookback mirrors entsoeLookback's reasoning.
-const eiaLookback = 2 * time.Hour
+// eiaLookback uses the five-day overlap required by TASK-live-dashboard.md.
+const eiaLookback = 5 * 24 * time.Hour
 
 // pollEIAFn returns a poller that fetches hourly generation-by-fuel-type
 // rows for eia.Respondent over a trailing window and publishes each

@@ -15,15 +15,19 @@
   },
   "dependencies": {
     "@confluentinc/kafka-javascript": "^1.10.0",
+    "@fastify/cors": "^11.3.0",
+    "@fastify/websocket": "^11.3.0",
     "@renewable-pulse/contracts": "workspace:*",
     "fastify": "^5.12.1",
-    "pg": "^8.23.0"
+    "pg": "^8.23.0",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@renewable-pulse/config": "workspace:*",
     "@testcontainers/postgresql": "^12.1.0",
     "@testcontainers/redpanda": "^12.1.0",
     "@types/pg": "^8.23.1",
+    "@types/ws": "^8.18.1",
     "eslint": "^10.9.1",
     "globals": "^17.11.0",
     "tsx": "^4.23.12",

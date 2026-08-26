@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { pipelineHealthResponseSchema, readingsQuerySchema, readingsResponseSchema } from "./api.js";
+import {
+  generationMixQuerySchema,
+  generationShareRowSchema,
+  liveFrameSchema,
+  pipelineHealthResponseSchema,
+  readingsQuerySchema,
+  readingsResponseSchema,
+} from "./api.js";
 
 describe("readingsQuerySchema", () => {
   it("defaults limit to 100 when omitted", () => {
@@ -42,5 +49,53 @@ describe("pipelineHealthResponseSchema", () => {
       lastPollBySource: [],
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("live dashboard API schemas", () => {
+  it("rejects out-of-range hourly generation mix requests", () => {
+    const result = generationMixQuerySchema.safeParse({
+      source: "ONS",
+      zone: "BR-SE",
+      bucket: "hour",
+      from: "2026-01-01T00:00:00Z",
+      to: "2026-02-10T00:00:00Z",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects shares outside [0, 1]", () => {
+    const result = generationShareRowSchema.safeParse({
+      bucketStart: "2026-01-01T00:00:00Z",
+      source: "ONS",
+      share: 1.2,
+      includedMetrics: ["hydro", "wind", "solar"],
+      includedValue: 12,
+      totalValue: 10,
+      unit: "MWmed",
+      observedIntervals: 1,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects malformed live frames and unknown units", () => {
+    expect(liveFrameSchema.safeParse({ type: "heartbeat", sentAt: "2026-01-01T00:00:00Z" }).success).toBe(true);
+    expect(liveFrameSchema.safeParse({ type: "heartbeat", sentAt: "not-a-date" }).success).toBe(false);
+    expect(
+      liveFrameSchema.safeParse({
+        type: "reading",
+        reading: {
+          source: "ONS",
+          zone: "BR-SE",
+          asset_id: null,
+          metric: "hydro",
+          value: 1,
+          unit: "GW",
+          recorded_at: "2026-01-01T00:00:00Z",
+          ingested_at: "2026-01-01T00:00:01Z",
+          schema_version: 1,
+        },
+      }).success,
+    ).toBe(false);
   });
 });
