@@ -43,9 +43,10 @@ upstream data being sub-second:
 
 - **ONS (Brazil)** publishes generation broken down to individual plants, plant groups, and
   subsystems — so a single poll cycle yields hundreds of individual real readings, not one
-  number per country. `[VERIFY: ONS's docs describe some series as "read from origin, updated
-  daily" — confirm during implementation whether "hourly" data actually refreshes hourly or is
-  hourly-bucketed-but-daily-refreshed. This changes the realistic poll interval.]`
+  number per country. **Resolved (2026-08-26):** the `geracao-usina-2` dataset's own metadata
+  confirms it refreshes "Diariamente, às 12h e 19h" (daily, at 12:00 and 19:00) — rows are
+  hourly-*bucketed* (one row per plant per clock hour) but the file itself is only re-published
+  twice a day. A realistic poll interval is therefore on the order of an hour, not minutes.
 - **ENTSO-E** (used for Norway/Iceland) reports at 15–60 minute resolution depending on series.
 - **EIA** (USA) reports hourly.
 
@@ -64,10 +65,37 @@ let the marketing imply sub-second sensor push where the data is actually polled
 | **ENTSO-E Transparency Platform** | EU bidding zones, incl. Norway | 15/60-min depending on series | Free — email `transparency@entsoe.eu` with "RESTful API access" in the subject, registered address in the body; token issued within ~3 business days | Generation by fuel type per bidding zone, load, cross-border flows |
 | **EIA Open Data API** | USA | Hourly | Free, instant self-serve API key at `eia.gov/opendata` | Generation by fuel type, by balancing authority / state |
 
-`[VERIFY: exact ONS dataset endpoint paths and response schemas — the ONS Dados Abertos portal
-exposes datasets as CKAN-style resources (res_format=API); confirm the specific resource IDs for
-generation-by-source, reservoir levels, and CMO before writing the poller, from
-dados.ons.org.br's own dataset pages.]`
+**Resolved (2026-08-26) — ONS generation-by-plant dataset:** `dados.ons.org.br` is CKAN-backed,
+but the "API" resource format is **not** a queryable REST endpoint — it's a monthly flat-file
+dump hosted on S3, refreshed twice daily per the cadence above. Confirmed via a live fetch:
+
+- Dataset page: `https://dados.ons.org.br/dataset/geracao-usina-2` ("Geração de Usinas em Base
+  Horária" — verified hourly generation by plant/plant-set/small-plant-group, 2000–present).
+- CKAN metadata API: `https://dados.ons.org.br/api/3/action/package_show?id=geracao-usina-2`
+  lists every monthly resource (2022+) in CSV, PARQUET, and XLSX.
+- Direct file URL pattern (confirmed live, returns real data as of 2026-08-26):
+  `https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/geracao_usina_2_ho/GERACAO_USINA-2_{YYYY}_{MM}.csv`
+  — e.g. the August 2026 file is ~53 MB, semicolon-delimited, one row per plant per hour so far
+  this month.
+- **Confirmed CSV columns** (header row, semicolon-delimited):
+  `din_instante;id_subsistema;nom_subsistema;id_estado;nom_estado;cod_modalidadeoperacao;nom_tipousina;nom_tipocombustivel;nom_usina;id_ons;ceg;val_geracao`
+  — `din_instante` (timestamp, `YYYY-MM-DD HH:MM:SS`) → `recorded_at`; `id_subsistema`
+  (`N`/`NE`/`S`/`SE`/`CO`) → `zone` (prefix `BR-` per our zone-code convention, e.g. `BR-N`);
+  `nom_tipousina` (`HIDROELÉTRICA`/`TÉRMICA`/`EOLIELÉTRICA`/`FOTOVOLTAICA`) → `metric`'s source
+  category; `id_ons` → `asset_id` (empty for aggregated MMGD/`Conjunto de Usinas` rows — those
+  map to `asset_id: null`); `val_geracao` → `value` (MW — `[VERIFY: confirm MW vs. MWh against
+  the "Dicionário de Dados" PDF at
+  https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/geracao_usina_2_ho/DicionarioDados_GeracaoPorUsina.pdf
+  before Phase 3's cross-source unit normalization — val_geracao reads as an instantaneous MW
+  figure per hour-bucket based on the sample values seen, but the dictionary should confirm]`).
+- **Poller design implication:** this is a full-month-file download, not an incremental query —
+  the poller must fetch the current month's CSV each cycle and filter to rows newer than its own
+  last-seen `recorded_at` high-water mark per zone before publishing, relying on the idempotent
+  upsert key to make re-processing safe regardless.
+
+`[VERIFY: reservoir-level (EAR/ENA) and marginal-cost (CMO) dataset slugs — not yet looked up;
+resolve when Phase 1 grows beyond generation-by-source, following the same
+`dados.ons.org.br/dataset/...` → `package_show` → S3 URL pattern discovered above.]`
 
 `[VERIFY: ENTSO-E's RESTful API returns XML in IEC 62325 format — confirm the exact document
 types (A75 for actual generation per type, etc.) against the current Transparency Platform
@@ -77,11 +105,18 @@ REST API guide before writing the poller.]`
 eia.gov/opendata/documentation.php before writing the poller — the v1→v2 API had breaking
 changes historically.]`
 
-Iceland is not in ENTSO-E's coverage (not an EU member / not on the synchronous grid) —
-`[VERIFY: whether Iceland's grid operator Landsnet publishes an open data API; if not, the
-Iceland comparison point may need to fall back to an annual/static figure cited in the
-dashboard rather than a polled series — decide this in the implementation session's first task
-doc rather than silently dropping Iceland.]`
+Iceland is not in ENTSO-E's coverage (not an EU member / not on the synchronous grid).
+**Resolved (2026-08-26), decided in `docs/tasks/TASK-ingest-spine.md`:** Landsnet (Iceland's TSO)
+shows live power-flow data on its own website (`landsnet.is`), but no public open-data API or
+downloadable dataset was found after checking its site and searching for one — the real-time
+view appears to be an internal-only feed with no documented external endpoint. **Decision:**
+Iceland ships as a **static annual figure** (cited from a public source, e.g. Landsvirkjun/
+Orkustofnun's published generation-mix reports) in the country-comparison view rather than a
+polled series, clearly labeled as annual/static in the UI so it's never presented as live data.
+This is a Phase 4 (dashboard) concern, not a Phase 1 blocker. `[VERIFY: pick the specific cited
+source and figure when Phase 4's country-comparison view is built — Orkustofnun (Iceland's
+National Energy Authority) publishes annual statistics and is the more likely authoritative
+source than Landsnet itself, which is transmission-only.]`
 
 ## 4. Event pipeline
 
@@ -200,8 +235,14 @@ renewable-pulse/
 
 ## 10. Open questions
 
-- Iceland's data source (§3) — resolve in the first implementation task doc.
-- Exact Nest vs. Fastify choice for `apps/api` — left to the implementation session.
+- ~~Iceland's data source (§3)~~ — resolved in `docs/tasks/TASK-ingest-spine.md` (2026-08-26):
+  static annual figure, no polled API found.
+- ~~Exact Nest vs. Fastify choice for `apps/api`~~ — **resolved: Fastify.** Phase 1 needs one bare
+  HTTP endpoint; Phase 4 adds a WebSocket live feed. Fastify's plugin model (`@fastify/websocket`
+  alongside plain HTTP routes) covers both without Nest's DI/module ceremony, which buys nothing
+  for a single small service in this monorepo — `apps/api` doesn't need Nest's
+  controller/provider layering to stay organized at this scope.
 - Whether `apps/consumer`'s two consumer groups ship as one process with two consumer instances,
   or two separate deployable processes — a Railway service-count/cost tradeoff to decide during
-  implementation, not here.
+  implementation, not here. Still open; Phase 1 only needs the "persist" group, so this is a
+  Phase 4 decision.
