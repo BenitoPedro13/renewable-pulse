@@ -11,24 +11,24 @@ import { liveRoute } from "./routes/live.js";
 import { pipelineHealthRoute } from "./routes/pipeline-health.js";
 import { plantsRoute } from "./routes/plants.js";
 import { readingsRoute } from "./routes/readings.js";
+import { isOriginAllowed, parseAllowedOrigins } from "./origin.js";
 
 const port = Number(process.env.PORT ?? 3001);
 const host = process.env.HOST ?? "0.0.0.0";
-const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "http://localhost:3000").split(",").map((o) => o.trim()).filter(Boolean);
+const allowedOrigins = parseAllowedOrigins(process.env.ALLOWED_ORIGINS);
 
 const app = Fastify({ logger: true });
 const hub = new LiveHub();
 await app.register(cors, {
   origin(origin, cb) {
-    if (!origin || allowedOrigins.includes(origin)) cb(null, true);
+    if (isOriginAllowed(origin, allowedOrigins)) cb(null, true);
     else cb(new Error("Origin not allowed"), false);
   },
 });
 await app.register(websocket, {
   options: {
     verifyClient(info, done) {
-      const origin = info.origin;
-      done(!origin || allowedOrigins.includes(origin), 403, "Origin not allowed");
+      done(isOriginAllowed(info.origin, allowedOrigins), 403, "Origin not allowed");
     },
   },
 });
