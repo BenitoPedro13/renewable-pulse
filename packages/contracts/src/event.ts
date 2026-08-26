@@ -1,36 +1,53 @@
 import { z } from "zod";
 
 /**
- * ONS subsystem codes (id_subsistema), prefixed to match the BR-<zone>
- * convention documented in docs/architecture.md §4. Extend with ENTSO-E/EIA
- * zone codes in Phase 3 — do not silently widen this to z.string().
+ * ONS subsystem codes (BR-<id_subsistema>), ENTSO-E Norwegian bidding zones
+ * (NO-NO1..NO-NO5), and EIA's US48 national aggregate (docs/architecture.md
+ * §3, Phase 3) — do not silently widen this to z.string().
  */
-export const zoneSchema = z.enum(["BR-N", "BR-NE", "BR-S", "BR-SE", "BR-CO"]);
+export const zoneSchema = z.enum([
+  "BR-N",
+  "BR-NE",
+  "BR-S",
+  "BR-SE",
+  "BR-CO",
+  "NO-NO1",
+  "NO-NO2",
+  "NO-NO3",
+  "NO-NO4",
+  "NO-NO5",
+  "US-US48",
+]);
 export type Zone = z.infer<typeof zoneSchema>;
 
 /**
- * Normalized generation source, derived from ONS's nom_tipousina field.
- * Confirmed live values (2026-08-26 poll of the current-month file):
- * HIDROELÉTRICA, TÉRMICA, EOLIELÉTRICA, FOTOVOLTAICA, and NUCLEAR (Angra —
+ * Normalized generation source. ONS's nom_tipousina values map 1:1
+ * (HIDROELÉTRICA, TÉRMICA, EOLIELÉTRICA, FOTOVOLTAICA, NUCLEAR — nuclear
  * kept distinct from "thermal" rather than folded in, since conflating a
  * fission plant with fossil/biomass thermal would misrepresent the
- * dashboard's renewable-share story). Extend as ENTSO-E/EIA fuel-type
- * vocabularies are mapped in during Phase 3.
+ * dashboard's renewable-share story). ENTSO-E's psrType and EIA's fueltype
+ * vocabularies (docs/architecture.md §3, Phase 3) fold their combustion
+ * categories (biomass/coal/gas/oil/peat) into the same "thermal" bucket, and
+ * both add an "other" catch-all for categories that don't fit hydro/thermal/
+ * wind/solar/nuclear (ENTSO-E's B20, EIA's OTH).
  */
-export const metricSchema = z.enum(["hydro", "thermal", "wind", "solar", "nuclear"]);
+export const metricSchema = z.enum(["hydro", "thermal", "wind", "solar", "nuclear", "other"]);
 export type Metric = z.infer<typeof metricSchema>;
 
 /**
  * Unit is constrained to what's actually confirmed for the sources wired up
- * so far. ONS's own data dictionary (see docs/architecture.md §3) confirms
- * val_geracao is "MWmed" (average MW over the hour), not plain MW/MWh —
- * widen only once a new source's unit is verified against its own docs,
- * never assumed.
+ * so far, never assumed. ONS: "MWmed" (average MW over the hour, its own
+ * data dictionary — docs/architecture.md §3). ENTSO-E: "MAW" (megawatt,
+ * confirmed via entsoe-py's real request/response handling, Phase 3). EIA:
+ * "MWh" (an hourly *energy total*, not a power reading — genuinely a
+ * different physical quantity than the other two; docs/architecture.md §2
+ * flags reconciling this as a Phase 4 dashboard concern, not silently
+ * converted here).
  */
-export const unitSchema = z.enum(["MWmed"]);
+export const unitSchema = z.enum(["MWmed", "MAW", "MWh"]);
 export type Unit = z.infer<typeof unitSchema>;
 
-export const sourceSchema = z.enum(["ONS"]);
+export const sourceSchema = z.enum(["ONS", "ENTSOE", "EIA"]);
 export type Source = z.infer<typeof sourceSchema>;
 
 /**

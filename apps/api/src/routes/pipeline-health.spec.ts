@@ -64,8 +64,12 @@ afterAll(async () => {
 });
 
 describe("computeLastPollBySource", () => {
-  it("reports the real last-successful-poll timestamp for a source with data", async () => {
+  it("reports the real last-successful-poll timestamp for a source with data, and null for sources with none", async () => {
     const result = await computeLastPollBySource();
-    expect(result).toEqual([{ source: "ONS", lastSuccessAt: "2026-08-01T12:00:00.000Z" }]);
+    expect(result).toEqual([
+      { source: "ONS", lastSuccessAt: "2026-08-01T12:00:00.000Z" },
+      { source: "ENTSOE", lastSuccessAt: null },
+      { source: "EIA", lastSuccessAt: null },
+    ]);
   });
 });

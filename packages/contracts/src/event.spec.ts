@@ -47,6 +47,36 @@ describe("readingEventSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("accepts a real-shaped ENTSO-E Norway reading", () => {
+    const result = readingEventSchema.safeParse({
+      source: "ENTSOE",
+      zone: "NO-NO1",
+      asset_id: null,
+      metric: "hydro",
+      value: 4213,
+      unit: "MAW",
+      recorded_at: "2026-08-26T05:00:00Z",
+      ingested_at: "2026-08-26T06:00:11Z",
+      schema_version: 1,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a real-shaped EIA USA reading", () => {
+    const result = readingEventSchema.safeParse({
+      source: "EIA",
+      zone: "US-US48",
+      asset_id: null,
+      metric: "wind",
+      value: 98234,
+      unit: "MWh",
+      recorded_at: "2026-08-26T05:00:00Z",
+      ingested_at: "2026-08-26T06:00:11Z",
+      schema_version: 1,
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("rejects a missing recorded_at", () => {
     const result = readingEventSchema.safeParse({
       source: "ONS",

@@ -4,14 +4,20 @@ A live instrument panel for how much of the world's electricity already comes fr
 renewables — starting with Brazil's hydro-heavy grid, compared against a few countries that
 are already almost entirely renewable (Norway, Iceland) and the USA.
 
-**Status: Phase 2 (reliability layer) complete.** ONS Brazil generation-by-plant data flows real,
-live, end-to-end: `apps/ingest` (Go) → Redpanda → `apps/consumer` (TS) → TimescaleDB →
-`apps/api` (Fastify). Verified against a live ONS poll (2026-08-26): 366,336 real plant/hour
-readings ingested and persisted with zero duplicates on replay. Schema-invalid/unknown-zone
-readings now route to `readings.dlq` instead of being dropped (`pnpm --filter consumer dlq --
-list|replay` inspects/replays them), and `GET /pipeline-health` reports real DLQ depth, consumer
-lag, and last-successful-poll-per-source. Phases 3–5 (ENTSO-E/EIA, dashboard, polish) are next —
-see `docs/tasks/TASK-implementation-plan.md`.
+**Status: Phase 3 (ENTSO-E/EIA pollers) built, live-verification pending.** ONS Brazil
+generation-by-plant data flows real, live, end-to-end: `apps/ingest` (Go) → Redpanda →
+`apps/consumer` (TS) → TimescaleDB → `apps/api` (Fastify). Verified against a live ONS poll
+(2026-08-26): 366,336 real plant/hour readings ingested and persisted with zero duplicates on
+replay. Schema-invalid/unknown-zone readings route to `readings.dlq` instead of being dropped
+(`pnpm --filter consumer dlq -- list|replay` inspects/replays them), and `GET /pipeline-health`
+reports real DLQ depth, consumer lag, and last-successful-poll-per-source. `apps/ingest` now also
+has ENTSO-E (Norway, five bidding zones) and EIA (USA, `US48` national aggregate) pollers on the
+same canonical schema, each gated on its own credential env var so ONS keeps running without them
+— see `docs/tasks/TASK-entsoe-eia-pollers.md`. **Neither credential exists yet** (ENTSO-E needs an
+email-registered token, ~3 business days; EIA's is instant self-serve), so those two pollers are
+unit-tested against the resolved request/response shapes but not yet run against a live captured
+response — that verification pass is the next thing to do once the user has both. Phases 4–5
+(dashboard, polish) are next after that — see `docs/tasks/TASK-implementation-plan.md`.
 
 ## What this is
 
@@ -66,6 +72,8 @@ cd .. && pnpm install
 pnpm --filter @renewable-pulse/contracts build
 
 # 3. poll ONS once and publish to Redpanda (real network call, real data)
+# set ENTSOE_API_TOKEN / EIA_API_KEY in .env to also enable those pollers —
+# unset, they're skipped with a log line rather than failing ingest
 cd apps/ingest && go run . --once
 
 # 4. consume + persist into TimescaleDB (runs migrations on startup)

@@ -1,0 +1,82 @@
+package entsoe
+
+import (
+	"context"
+	"encoding/xml"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"time"
+)
+
+// baseURL is ENTSO-E's Transparency Platform RESTful API
+// (docs/architecture.md §3, confirmed via entsoe-py's real request-building
+// code — the official user-guide pages returned 400/503 when checked live).
+const baseURL = "https://web-api.tp.entsoe.eu/api"
+
+// Zone is one Norwegian bidding zone this poller covers, pairing our
+// canonical zone code with ENTSO-E's own EIC domain code.
+type Zone struct {
+	// Code is our canonical zone (e.g. "NO-NO1").
+	Code string
+	// EIC is ENTSO-E's in_Domain area code for this zone.
+	EIC string
+}
+
+// Zones are the five Norwegian bidding zones, confirmed against entsoe-py's
+// mappings.py (docs/tasks/TASK-entsoe-eia-pollers.md §1).
+var Zones = []Zone{
+	{Code: "NO-NO1", EIC: "10YNO-1--------2"},
+	{Code: "NO-NO2", EIC: "10YNO-2--------T"},
+	{Code: "NO-NO3", EIC: "10YNO-3--------J"},
+	{Code: "NO-NO4", EIC: "10YNO-4--------9"},
+	{Code: "NO-NO5", EIC: "10Y1001A1001A48H"},
+}
+
+const periodLayout = "200601021504"
+
+// FetchActualGeneration fetches document type A75 (Actual generation per
+// type), process type A16 (Realised), for one EIC area code over
+// [start, end).
+func FetchActualGeneration(ctx context.Context, token, eicArea string, start, end time.Time) (*glMarketDocument, error) {
+	q := url.Values{
+		"securityToken": {token},
+		"documentType":  {"A75"},
+		"processType":   {"A16"},
+		"in_Domain":     {eicArea},
+		"periodStart":   {start.UTC().Format(periodLayout)},
+		"periodEnd":     {end.UTC().Format(periodLayout)},
+	}
+	reqURL := baseURL + "?" + q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("entsoe: building request: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("entsoe: fetching %s: %w", eicArea, err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("entsoe: reading response body: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("entsoe: fetching %s: unexpected status %s: %s", eicArea, resp.Status, body)
+	}
+
+	var ack acknowledgementMarketDocument
+	if err := xml.Unmarshal(body, &ack); err == nil && ack.XMLName.Local == "Acknowledgement_MarketDocument" {
+		return nil, fmt.Errorf("entsoe: %s rejected query: [%s] %s", eicArea, ack.Reason.Code, ack.Reason.Text)
+	}
+
+	var doc glMarketDocument
+	if err := xml.Unmarshal(body, &doc); err != nil {
+		return nil, fmt.Errorf("entsoe: parsing response for %s: %w", eicArea, err)
+	}
+	return &doc, nil
+}

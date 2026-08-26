@@ -20,12 +20,18 @@ type Reading struct {
 }
 
 const (
-	SourceONS = "ONS"
+	SourceONS    = "ONS"
+	SourceENTSOE = "ENTSOE"
+	SourceEIA    = "EIA"
+
 	UnitMWmed = "MWmed"
+	UnitMAW   = "MAW"
+	UnitMWh   = "MWh"
 
 	MetricHydro   = "hydro"
 	MetricThermal = "thermal"
 	MetricWind    = "wind"
 	MetricSolar   = "solar"
 	MetricNuclear = "nuclear"
+	MetricOther   = "other"
 )

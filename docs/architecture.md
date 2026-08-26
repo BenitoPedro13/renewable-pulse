@@ -110,13 +110,52 @@ dump hosted on S3, refreshed twice daily per the cadence above. Confirmed via a 
 resolve when Phase 1 grows beyond generation-by-source, following the same
 `dados.ons.org.br/dataset/...` → `package_show` → S3 URL pattern discovered above.]`
 
-`[VERIFY: ENTSO-E's RESTful API returns XML in IEC 62325 format — confirm the exact document
-types (A75 for actual generation per type, etc.) against the current Transparency Platform
-REST API guide before writing the poller.]`
+**Resolved (2026-08-26), decided in `docs/tasks/TASK-entsoe-eia-pollers.md`:** ENTSO-E's own
+Guide/Postman doc pages returned 400/503 when checked live; resolved instead via `entsoe-py`
+(`EnergieID/entsoe-py`, a widely-used open-source client that talks to the real production API)
+— its actual request-building and XML-parsing code, not a hand-built mock. Base URL
+`https://web-api.tp.entsoe.eu/api`, auth via a `securityToken` query param. Actual generation per
+type is `documentType=A75` (Actual generation per type), `processType=A16` (Realised),
+`in_Domain={EIC area code}` (Norway's five bidding zones: `NO1`→`10YNO-1--------2`,
+`NO2`→`10YNO-2--------T`, `NO3`→`10YNO-3--------J`, `NO4`→`10YNO-4--------9`,
+`NO5`→`10Y1001A1001A48H`), `periodStart`/`periodEnd` as `YYYYMMDDHHmm` UTC. Response is XML
+`GL_MarketDocument` (or `Acknowledgement_MarketDocument` + `Reason/text` on error/no-data — the
+poller detects this root element rather than trying to parse it as data); each `TimeSeries` has
+`MktPSRType/psrType` (fuel-type code), `inBiddingZone_Domain.mRID` (generation) vs.
+`outBiddingZone_Domain.mRID` (consumption, e.g. pumped-storage charging — skipped, not
+generation), and `Period`/`timeInterval`/`resolution` (`PT60M` in practice for this document
+type) /`Point` (`position`+`quantity`); unit is `MAW` (megawatt). `psrType` → canonical `metric`:
+`B01`–`B08` (biomass/fossil combustion variants) → `thermal`; `B10`–`B12` (hydro variants) →
+`hydro`; `B14` → `nuclear`; `B16` → `solar`; `B18`/`B19` → `wind`; `B20` → `other`. Left
+unmapped on purpose (skip+log, not a DLQ case): `B09` geothermal, `B13` marine, `B15`
+other-renewable, `B17` waste, `B21`–`B25` (network infrastructure, not generation) — none are
+material to Norway's actual hydro/wind-dominated mix; extend the map if a live poll ever shows
+one.
 
-`[VERIFY: EIA API v2 request shape (facet/frequency parameters) against the current
-eia.gov/opendata/documentation.php before writing the poller — the v1→v2 API had breaking
-changes historically.]`
+**Resolved (2026-08-26), decided in `docs/tasks/TASK-entsoe-eia-pollers.md`:** EIA's own
+`documentation.php` returned 503 when checked live; resolved via the v2 API technical docs
+excerpted in `RamiKrispin/EIAapi`'s README plus EIA-930 program docs (PUDL's
+`data_sources/eia930.html`). Route: `https://api.eia.gov/v2/electricity/rto/fuel-type-data/data/`,
+params `api_key`, `frequency=hourly` (UTC), `data[0]=value`, `facets[respondent][]`, `start`/`end`
+as `YYYY-MM-DDTHH`, `sort[0][column]=period`, `sort[0][direction]=desc`, `offset`, `length`
+(max 5000/page). Respondent scope for v1: `US48` (EIA's own code for the national Lower-48
+aggregate) — **not** `CAISO`/`CISO`, deviating from this doc's earlier `US-CAISO` zone example
+below, which used an invented respondent code; a single national aggregate is also the more
+direct fit for the country-comparison view than one specific state ISO. `fueltype` facet codes
+for this route (confirmed set): `COL`, `NG`, `NUC`, `OIL`, `WAT`, `SUN`, `WND`, `OTH` — mapped to
+canonical `metric`: `COL`/`NG`/`OIL` → `thermal`, `NUC` → `nuclear`, `WAT` → `hydro`, `SUN` →
+`solar`, `WND` → `wind`, `OTH` → `other`; all 8 codes are mapped, nothing left for the DLQ.
+Response envelope: `{ response: { data: [ { period, respondent, fueltype, value, ... } ] } }`,
+`period` as `YYYY-MM-DDTHH` (UTC hour) → `recorded_at`. Unit is `megawatthours`, stored as `MWh`
+— an **hourly energy total, not a power reading**, a real difference from ONS's `MWmed` and
+ENTSO-E's `MAW` (both power units). Numerically an hourly MWh total and an hourly-average-MW
+figure are the same number, but that equivalence is a Phase 4 dashboard-layer decision to make
+deliberately when charts compare across sources, not something ingest silently assumes.
+
+**Still open:** both resolutions above were cross-referenced against real third-party clients of
+the live APIs, not a captured response from our own poller — a live verification pass is owed
+once the user has both an ENTSO-E token and an EIA key (`docs/tasks/TASK-entsoe-eia-pollers.md`
+§5), matching the rigor Phase 1's 366k-row live ONS poll already established.
 
 Iceland is not in ENTSO-E's coverage (not an EU member / not on the synchronous grid).
 **Resolved (2026-08-26), decided in `docs/tasks/TASK-ingest-spine.md`:** Landsnet (Iceland's TSO)
@@ -166,8 +205,8 @@ source than Landsnet itself, which is transmission-only.]`
 - **Canonical event schema** (defined once in `packages/contracts`, mirrored by hand in Go —
   see §6 on the cross-language seam): `{ source, zone, asset_id | null, metric, value, unit,
   recorded_at, ingested_at, schema_version }`. `zone` is a stable code (`BR-SIN`, `NO-NO1`,
-  `US-CAISO`, etc.), `asset_id` is null for zone/subsystem-level readings and set for
-  plant-level ones.
+  `US-US48`, etc. — see §3's EIA resolution for why `US48` rather than a specific state ISO),
+  `asset_id` is null for zone/subsystem-level readings and set for plant-level ones.
 - **Idempotency key**: `(source, zone, asset_id, metric, recorded_at)` — a poller re-fetching
   the same window must not create duplicate rows. TimescaleDB upsert on this composite key.
 - **Dead-letter queue**: any event that fails schema validation, or references a `zone`/`metric`
@@ -273,3 +312,8 @@ renewable-pulse/
   or two separate deployable processes — a Railway service-count/cost tradeoff to decide during
   implementation, not here. Still open; Phase 1 only needs the "persist" group, so this is a
   Phase 4 decision.
+- ~~ENTSO-E/EIA request/response shapes (§3)~~ — resolved in
+  `docs/tasks/TASK-entsoe-eia-pollers.md` (2026-08-26): see §3 for the full detail. **Still open:**
+  a live verification pass against real captured responses, pending the user obtaining an
+  ENTSO-E token and an EIA key (neither existed yet when this phase was built) — not a blocker for
+  Phase 4, but should happen before this data is presented as fully verified.

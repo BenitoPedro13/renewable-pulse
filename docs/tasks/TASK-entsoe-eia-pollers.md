@@ -1,0 +1,157 @@
+# TASK-entsoe-eia-pollers
+
+## 1. Current scenario
+
+Phase 1 (spine) and Phase 2 (reliability) are done and committed (`6fb44c7`, `17a765c`):
+`apps/ingest` has one poller (ONS Brazil), publishing to Redpanda's `readings` topic; `apps/consumer`
+persists idempotently and routes bad events to `readings.dlq`; `apps/api` exposes `/readings` and
+`/pipeline-health`. `packages/contracts`' `sourceSchema`/`zoneSchema`/`metricSchema`/`unitSchema` are
+all closed enums scoped to what ONS actually produces (`docs/architecture.md` §3).
+
+This is Phase 3 (`docs/tasks/TASK-implementation-plan.md` §2): add ENTSO-E (Norway) and EIA (USA)
+pollers on the same canonical schema and publish path, resolving the Iceland question (already done,
+see below) and the two remaining `[VERIFY]`s in `docs/architecture.md` §3.
+
+**Credentials status (checked with the user before starting):** neither an ENTSO-E API token nor an
+EIA API key exists yet. ENTSO-E's token requires emailing `transparency@entsoe.eu` (~3 business days);
+EIA's is instant self-serve at `eia.gov/opendata`. Decision: build both pollers now against the
+request/response shapes resolved below, with normalization logic covered by unit tests using
+realistic fixture data (mirroring `ons/normalize_test.go`'s approach — that file is itself a pure
+unit test, not a live-network test). A **live verification pass against real captured responses is
+still owed** once the user has both credentials — tracked as an open item in §5, not silently
+skipped.
+
+### Iceland — already resolved, not part of this task
+
+`docs/architecture.md` §3/§10 already records this (2026-08-26, during Phase 1): Iceland has no
+discoverable public open-data API, ships as a static annual figure in Phase 4's dashboard. Nothing
+to do here.
+
+### `[VERIFY]` #1 — ENTSO-E RESTful API request/response shape — resolved
+
+Official doc pages (`transparency.entsoe.eu/.../Guide.html`, the EIA-equivalent, and the Postman
+collection) were unreachable when fetched today (400/503). Resolved instead by cross-referencing
+`entsoe-py` (`EnergieID/entsoe-py`, a widely-used, actively-maintained open-source client that talks
+to the real production API) — its actual request-building and XML-parsing code, not a hand-built
+mock, per this project's "real captured response" testing ethos:
+
+- **Base URL:** `https://web-api.tp.entsoe.eu/api`
+- **Auth:** `securityToken` query parameter (not a header).
+- **Request for actual generation per type:** `documentType=A75` (Actual generation per type),
+  `processType=A16` (Realised), `in_Domain={EIC area code}`, `periodStart`/`periodEnd` as
+  `YYYYMMDDHHmm` (UTC), e.g. `202608260000`.
+- **Norway bidding-zone EIC codes** (confirmed against `entsoe-py`'s `mappings.py`):
+  `NO1`→`10YNO-1--------2`, `NO2`→`10YNO-2--------T`, `NO3`→`10YNO-3--------J`,
+  `NO4`→`10YNO-4--------9`, `NO5`→`10Y1001A1001A48H`.
+- **Response:** XML `GL_MarketDocument` (or `Acknowledgement_MarketDocument` with a `Reason/text` on
+  error/no-data — the poller must detect this root element and surface it as an error rather than
+  trying to parse it as data). Each `TimeSeries` carries `MktPSRType/psrType` (fuel type code),
+  `inBiddingZone_Domain.mRID` (generation direction) vs. `outBiddingZone_Domain.mRID` (consumption
+  direction — e.g. pumped-storage charging; **skip these**, they are not generation), and one or more
+  `Period` blocks, each with `timeInterval/start`+`end`, `resolution` (`PT60M` for this document type
+  in practice), and `Point` elements (`position` + `quantity`). A point's timestamp is
+  `periodStart + (position-1) × resolution`. The unit is `MAW` (megawatt) — the `quantity_Measure_Unit.name`
+  tag, distinct from a period total.
+- **`psrType` → canonical `metric` mapping used** (full code table from `entsoe-py`'s
+  `PSRTYPE_MAPPINGS`, cross-checked against ENTSO-E's own published code list):
+  `B01`–`B08` (biomass, lignite, coal-derived gas, gas, hard coal, oil, oil shale, peat) → `thermal`
+  (matches ONS's existing "TÉRMICA" bucket, which already folds all combustion sources together);
+  `B10`–`B12` (pumped storage, run-of-river, reservoir) → `hydro`; `B14` → `nuclear`; `B16` → `solar`;
+  `B18`/`B19` (offshore/onshore) → `wind`; `B20` → `other` (new metric, see contracts change below).
+  Left **unmapped on purpose** (normalize returns an error, `main.go` logs+skips, same posture as
+  ONS's unmapped-`nom_tipousina` handling): `B09` geothermal, `B13` marine, `B15` other-renewable,
+  `B17` waste, `B21`–`B25` (network infrastructure codes, not generation) — none of these are
+  material to Norway's actual generation mix (hydro + wind dominated, no coal/nuclear/geothermal),
+  so skipping is honest rather than a stopgap; extend the map if a live poll ever shows one.
+- **Zones polled:** all five Norwegian bidding zones (`NO1`–`NO5`) — matches the "plant/subsystem
+  granularity" precedent ONS set, and the doc's own `NO-NO1` zone-code example.
+
+### `[VERIFY]` #2 — EIA API v2 request/response shape — resolved
+
+`eia.gov/opendata/documentation.php` returned 503 when fetched today. Resolved via the EIA v2 API
+technical documentation excerpted in `RamiKrispin/EIAapi`'s README (a real, actively-used R client for
+this exact API) plus the EIA-930 program docs (PUDL's `data_sources/eia930.html`) for the
+domain-specific facet/unit details:
+
+- **Base URL / route:** `https://api.eia.gov/v2/electricity/rto/fuel-type-data/data/`
+- **Query params:** `api_key`, `frequency=hourly` (UTC hours — EIA's own docs distinguish `hourly`
+  (UTC) from `local-hourly`; we use UTC to match `recorded_at`'s convention elsewhere),
+  `data[0]=value`, `facets[respondent][]`, `start`/`end` as `YYYY-MM-DDTHH`, `sort[0][column]=period`,
+  `sort[0][direction]=desc`, `offset`, `length` (max 5000/page).
+- **Respondent scope:** `US48` (EIA's own code for "United States Lower 48" — the national
+  aggregate) only, for v1. **Deviates from `docs/architecture.md` §4's illustrative `US-CAISO` zone
+  example** — `CAISO` isn't EIA's actual respondent code (it's `CISO`), and a single national
+  aggregate is the more direct fit for the country-comparison view (Brazil vs. Norway vs. USA
+  renewable share) than one specific state ISO. `docs/architecture.md` is updated to reflect this.
+  Extending to specific balancing authorities (e.g. `CISO`, `ERCO`) is a future scope increase, not
+  done here.
+- **`fueltype` facet codes for this route** (confirmed set, per EIA-930 program docs): `COL`, `NG`,
+  `NUC`, `OIL`, `WAT`, `SUN`, `WND`, `OTH` — mapped to canonical `metric`: `COL`/`NG`/`OIL` →
+  `thermal`, `NUC` → `nuclear`, `WAT` → `hydro`, `SUN` → `solar`, `WND` → `wind`, `OTH` → `other`.
+  All 8 codes are mapped; nothing left unmapped for this source.
+- **Response envelope:** `{ response: { data: [ { period, respondent, fueltype, value, ... } ] } }`.
+  `period` is `YYYY-MM-DDTHH` (the UTC hour) → `recorded_at`. `value` is a numeric string; unit is
+  `megawatthours` per EIA-930's own docs (an **hourly energy total, not an instantaneous/average power
+  reading** — a real, documented difference from ONS's `MWmed` and ENTSO-E's `MAW`, both power units).
+  Stored honestly as its own unit code `MWh` rather than silently converted — `docs/architecture.md`
+  §2/§3 now flags this explicitly as a Phase 4 dashboard concern (numerically, an hourly MWh total
+  and an hourly-average MW figure are the same number, but the *labels* must stay honest until that
+  equivalence is deliberately confirmed and applied in the chart layer, not assumed silently in
+  ingest).
+
+## 2. Planned changes
+
+1. **`packages/contracts/src/event.ts`**: extend `sourceSchema` to `["ONS", "ENTSOE", "EIA"]`;
+   `zoneSchema` to add `NO-NO1`..`NO-NO5` and `US-US48`; `metricSchema` to add `"other"`; `unitSchema`
+   to add `"MAW"` and `"MWh"`. Add acceptance tests to `event.spec.ts` for one ENTSO-E-shaped and one
+   EIA-shaped reading.
+2. **`apps/ingest/internal/event/event.go`**: mirror the same additions by hand (`SourceENTSOE`,
+   `SourceEIA`, `MetricOther`, `UnitMAW`, `UnitMWh`) — same cross-language seam as Phase 1.
+3. **`apps/ingest/internal/entsoe/`** (new package): `client.go` (HTTP GET against the confirmed URL/
+   params, XML decode, `Acknowledgement_MarketDocument` error detection), `normalize.go` (`psrType` →
+   metric map, direction filtering, position→timestamp math, `Normalize` returning `event.Reading`),
+   unit tests mirroring `ons/normalize_test.go`'s style (construct a `TimeSeries`/`Period`/`Point`
+   fixture in-memory, assert the normalized reading).
+4. **`apps/ingest/internal/eia/`** (new package): `client.go` (HTTP GET, JSON decode into the response
+   envelope), `normalize.go` (`fueltype` → metric map, `Normalize`), unit tests same style.
+5. **`apps/ingest/main.go`**: generalize from one hardcoded ONS poller to a small list of named
+   pollers, each gated on its own required env var being present (`ENTSOE_API_TOKEN`,
+   `EIA_API_KEY`) — so local dev / CI keeps working with ONS alone while the user's credentials are
+   pending, rather than failing outright. All pollers still share one `POLL_INTERVAL` ticker (each
+   poller's own fetch window is what matters for freshness, not the trigger cadence — no need for
+   per-source intervals at this scope).
+6. **`.env.example`**: add `ENTSOE_API_TOKEN` and `EIA_API_KEY` (both optional/commented — absence
+   disables that poller, per #5).
+7. **`docs/architecture.md`**: mark both `[VERIFY]`s in §3 resolved with the findings above; update
+   the illustrative `US-CAISO` zone example to `US-US48`; add the MWh-vs-MW honesty note to §2/§3;
+   update §9 if needed.
+8. **`README.md`**: status line/quickstart update once Phase 3 is committed.
+
+## 3. Why
+
+Same reasoning as Phase 1/2: real sources, canonical schema, DLQ-safe unmapped-category handling.
+Gating each new poller on its own credential env var (rather than requiring both up front) means the
+existing ONS spine keeps running for the user today, and Phase 3 doesn't block on a 3-business-day
+external email round-trip.
+
+## 4. Affected files
+
+- `packages/contracts/src/event.ts`, `event.spec.ts`
+- `apps/ingest/internal/event/event.go`
+- `apps/ingest/internal/entsoe/client.go`, `normalize.go`, `parse.go` (XML types), `*_test.go`
+- `apps/ingest/internal/eia/client.go`, `normalize.go`, `*_test.go`
+- `apps/ingest/main.go`
+- `.env.example`, `docs/architecture.md`, `README.md`
+
+## 5. Verification
+
+- `pnpm turbo run lint typecheck test build` passes across the monorepo (contracts enum extensions,
+  new Go packages' unit tests).
+- `go test ./...` in `apps/ingest` passes, including new `entsoe`/`eia` normalize tests built from
+  realistic fixtures matching the confirmed request/response shapes above.
+- ONS's existing poller and tests are unaffected (no changes to `internal/ons`).
+- **Still open, not done in this task**: a live run of `apps/ingest` against the real ENTSO-E and EIA
+  APIs once the user has both credentials, to confirm the resolved shapes above against an actual
+  captured response (matching this project's "provider shape tested from a real response" rule) — the
+  same rigor Phase 1 applied to ONS via the 366k-row live poll
+  (`docs/tasks/TASK-ingest-spine.md` §6). Follow-up task, not blocking this one's commit.
