@@ -1,13 +1,11 @@
 "use client";
 
-import type { Metric, Zone } from "@renewable-pulse/contracts";
-import { zoneSchema } from "@renewable-pulse/contracts";
+import type { Metric, Source, Zone } from "@renewable-pulse/contracts";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { useFixedDateRange } from "@/hooks/use-fixed-date-range";
 import { useGenerationMix } from "@/hooks/use-generation-mix";
 
-const ONS_ZONES = zoneSchema.options.filter((zone): zone is Zone & `BR-${string}` => zone.startsWith("BR-"));
 const DAYS = 14;
 
 const METRIC_ORDER: Metric[] = ["hydro", "wind", "solar", "thermal", "nuclear", "other"];
@@ -43,14 +41,29 @@ function toZonePercentRows(rows: { zone: string; metric: Metric; value: number }
 }
 
 /**
- * Brazil's five ONS subsystems each have a genuinely different generation
- * mix (the Amazon-heavy North is almost entirely hydro; the Northeast has
- * far more wind) — a national total hides that. One 100%-stacked bar per
- * subsystem, in % rather than raw MWmed, makes the comparison direct.
+ * Each region within a source has a genuinely different generation mix
+ * (ONS's Amazon-heavy North subsystem is almost entirely hydro while its
+ * Northeast has far more wind; EIA's ISO New England leans nuclear/gas while
+ * SWPP leans wind) — a national/source-wide total hides that. One
+ * 100%-stacked bar per zone, in % rather than raw source units, makes the
+ * regional comparison direct. Generalized (source/zones/label props) so
+ * Brazil's and USA's regional charts share one component
+ * (docs/tasks/TASK-live-dashboard.md §2.7/§2.8) instead of duplicating a
+ * per-country file.
  */
-export function RegionalMixChart({ visibleMetrics = METRIC_ORDER }: { visibleMetrics?: Metric[] }) {
+export function RegionalMixChart({
+  source,
+  zones,
+  label,
+  visibleMetrics = METRIC_ORDER,
+}: {
+  source: Source;
+  zones: Zone[];
+  label: string;
+  visibleMetrics?: Metric[];
+}) {
   const { from, to } = useFixedDateRange(DAYS);
-  const { data, isPending, isError, error } = useGenerationMix({ source: "ONS", zones: ONS_ZONES, from, to, bucket: "day" });
+  const { data, isPending, isError, error } = useGenerationMix({ source, zones, from, to, bucket: "day" });
 
   if (isPending) return <p className="text-paragraph-sm text-text-sub-600">Loading regional mix…</p>;
   if (isError) {
@@ -63,8 +76,8 @@ export function RegionalMixChart({ visibleMetrics = METRIC_ORDER }: { visibleMet
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between">
-        <h3 className="text-label-sm text-text-strong-950">Generation mix by subsystem</h3>
-        <span className="text-paragraph-xs text-text-soft-400">% of subsystem total, last {DAYS} days</span>
+        <h3 className="text-label-sm text-text-strong-950">Generation mix by region</h3>
+        <span className="text-paragraph-xs text-text-soft-400">% of {label} total, last {DAYS} days</span>
       </div>
       <ChartContainer config={chartConfig} className="aspect-auto h-56 w-full">
         <BarChart data={rows} layout="vertical" margin={{ left: 8 }}>

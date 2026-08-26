@@ -4,9 +4,12 @@ import { z } from "zod";
  * ONS subsystem codes (BR-<id_subsistema>), ENTSO-E bidding zones (Norway's
  * five NO-NO1..NO-NO5 plus the Netherlands' single NL bidding zone — EIC
  * `10YNL----------L`, confirmed against entsoe-py's own mappings.py, the
- * same trusted source the Norway zones were verified against), and EIA's
- * US48 national aggregate (docs/architecture.md §3, Phase 3) — do not
- * silently widen this to z.string().
+ * same trusted source the Norway zones were verified against), EIA's US48
+ * national aggregate (docs/architecture.md §3, Phase 3), and EIA's seven
+ * RTO/ISO balancing-authority respondents added for USA regional depth
+ * (docs/tasks/TASK-live-dashboard.md §2.8 — verified live against EIA's own
+ * `facet/respondent/` metadata endpoint, not guessed) — do not silently
+ * widen this to z.string().
  */
 export const zoneSchema = z.enum([
   "BR-N",
@@ -21,6 +24,13 @@ export const zoneSchema = z.enum([
   "NO-NO5",
   "NL",
   "US-US48",
+  "US-CISO",
+  "US-ERCO",
+  "US-ISNE",
+  "US-MISO",
+  "US-NYIS",
+  "US-PJM",
+  "US-SWPP",
 ]);
 export type Zone = z.infer<typeof zoneSchema>;
 

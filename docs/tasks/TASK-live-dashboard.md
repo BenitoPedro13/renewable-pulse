@@ -364,16 +364,52 @@ Northeast is the wind-heavy subsystem. `PlantLeaderboard` (Brazil-only, per-fuel
 client-side from the same hourly `generation-mix` data the diurnal chart already fetches — no new
 endpoint needed) are wired into both `BrazilSection` and `UsaSection`.
 
-**Explicitly deferred (bigger, separate scope — not started this session):** EIA balancing-
-authority-level generation (CISO/ERCOT/PJM/MISO/SWPP/...) for a true US-regional mix comparison
-mirroring Brazil's 5 subsystems (also needed for a real US-regional map, since EIA-860's own
-per-plant technology field only gives a fuel type, not a demand-side breakdown); ONS
+**Explicitly deferred (bigger, separate scope — not started this session):** ONS
 reservoir-level (EAR) and marginal-cost (CMO) ingestion; ENTSO-E load/cross-border-flow document
-types (blocked on the same missing API token as the rest of ENTSO-E); Brazil per-plant
-leaderboard/volatility/ramp-rate statistics; a pipeline-transparency panel (data provenance,
-ingestion throughput, DLQ viewer). Each is real, additive, and intended for a following session —
-recorded here so the next session (or continuation) doesn't have to re-derive the plan or
-re-verify the EIA-860 route from scratch.
+types (blocked on the same missing API token as the rest of ENTSO-E); a pipeline-transparency
+panel (data provenance, ingestion throughput, DLQ viewer). Each is real, additive, and intended
+for a following session — recorded here so the next session (or continuation) doesn't have to
+re-derive the plan or re-verify anything from scratch.
+
+### 2.8 USA regional ingestion (2026-08-26, user-approved priority #1 from §2.7's deferred list)
+
+**Decision:** EIA's `electricity/rto/fuel-type-data` dataset — the same endpoint the existing
+`US48` national-aggregate poller already uses — also carries hourly fuel-type generation for
+individual RTO/ISO respondents. Verified live against EIA's own `facet/respondent/` metadata
+endpoint (83 real respondent codes) and a live data pull for each candidate: the seven formal
+RTO/ISO respondents `CISO` (California ISO), `ERCO` (ERCOT), `ISNE` (ISO New England), `MISO`
+(Midcontinent ISO), `NYIS` (NYISO), `PJM`, and `SWPP` (Southwest Power Pool) all returned real,
+current hourly rows for every fuel type. These seven are chosen over EIA's other 76 respondent
+codes because they are actual grid operators (like ONS's subsystems), not the ambiguous
+geographic-aggregate codes EIA also exposes (`TEX`, `CENT`, `NE`, `NW`, `SE`, `MIDA`, `MIDW`,
+`CAL`, `FLA`, `NY`, `SW`, `CAR`, `TEN`) whose relationship to the named RTOs (overlapping vs.
+disjoint) was not verified and is not needed for this parity goal.
+
+EIA's `facets[respondent][]` array facet accepts multiple values in a single request — verified
+live, a request with `CISO`, `ERCO`, and `PJM` returned rows for all three — so the poller issues
+one paginated request per poll cycle for all eight respondents (`US48` plus the seven RTOs)
+instead of eight separate HTTP calls. A combined 5-day window across 8 respondents can exceed
+EIA's 5000-row page size (single-respondent 5-day CISO alone returned 1089 rows), so
+`FetchFuelTypeData` now paginates using the response's own `response.total` field instead of
+assuming one page is enough.
+
+**Zone additions:** `packages/contracts/src/event.ts`'s `zoneSchema` gains `US-CISO`, `US-ERCO`,
+`US-ISNE`, `US-MISO`, `US-NYIS`, `US-PJM`, `US-SWPP` alongside the existing `US-US48` — this is
+the single source of truth per `CLAUDE.md` invariant #2; `apps/ingest`'s Go normalizer needs no
+change beyond the respondent list because it already derives `zone` as `"US-" + row.Respondent`.
+
+**Web:** `RegionalMixChart` (`apps/web/src/components/dashboard/regional-mix-chart.tsx`) was
+Brazil-only — it hardcoded `source: "ONS"` and filtered `zoneSchema.options` for the `BR-` prefix
+internally. Generalized to take `source`/`zones`/`label` props (matching the existing
+`GenerationMixChart`/`DiurnalPatternChart` convention from §2.7, so no per-country chart file is
+duplicated). `UsaSection` renders it scoped to the seven RTO zones (excluding `US-US48`, since
+that's the sum of the others and would misrepresent one more "region" alongside the sums it
+already contains) — mirroring Brazil's five-subsystem `RegionalMixChart` usage exactly.
+
+**Deferred from this addition:** a US regional plant *map* (color/group markers by
+balancing-authority region, mirroring Brazil's ANEEL-subsystem map) is not built here — it needs
+a verified balancing-authority field on EIA-860's per-plant records, which has not been checked.
+Recorded as a distinct follow-up rather than assumed to exist.
 
 ## 3. Why
 

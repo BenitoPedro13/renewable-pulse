@@ -68,7 +68,7 @@ export function BrazilSection({ visibleMetrics }: { visibleMetrics: Metric[] }) 
       <CurrentShare />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <GenerationMixChart source="ONS" zones={ONS_ZONES} label="all subsystems" visibleMetrics={visibleMetrics} />
-        <RegionalMixChart visibleMetrics={visibleMetrics} />
+        <RegionalMixChart source="ONS" zones={ONS_ZONES} label="subsystem" visibleMetrics={visibleMetrics} />
       </div>
       <DiurnalPatternChart source="ONS" zones={ONS_ZONES} label="all subsystems" visibleMetrics={visibleMetrics} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

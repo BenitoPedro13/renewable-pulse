@@ -190,8 +190,8 @@ func pollEntsoeFn(token string) func(ctx context.Context, pub *publish.Publisher
 const eiaLookback = 5 * 24 * time.Hour
 
 // pollEIAFn returns a poller that fetches hourly generation-by-fuel-type
-// rows for eia.Respondent over a trailing window and publishes each
-// successfully-normalized reading.
+// rows for every respondent in eia.Respondents over a trailing window and
+// publishes each successfully-normalized reading.
 func pollEIAFn(apiKey string) func(ctx context.Context, pub *publish.Publisher) error {
 	return func(ctx context.Context, pub *publish.Publisher) error {
 		ingestedAt := time.Now().UTC()

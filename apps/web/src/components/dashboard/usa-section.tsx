@@ -1,11 +1,19 @@
 "use client";
 
-import type { Metric } from "@renewable-pulse/contracts";
+import type { Metric, Zone } from "@renewable-pulse/contracts";
 import { DiurnalPatternChart } from "@/components/dashboard/diurnal-pattern-chart";
 import { GenerationMixChart } from "@/components/dashboard/generation-mix-chart";
+import { RegionalMixChart } from "@/components/dashboard/regional-mix-chart";
 import { VolatilityChart } from "@/components/dashboard/volatility-chart";
 import { GENERATION_SHARE_LABEL, useGenerationShare } from "@/hooks/use-generation-share";
 import { useFixedDateRange } from "@/hooks/use-fixed-date-range";
+
+// The seven RTO/ISO respondents added for regional depth
+// (docs/tasks/TASK-live-dashboard.md §2.8) — deliberately excludes
+// "US-US48", which is the sum of these regions (and others EIA does not
+// break out), so it doesn't appear as one more "region" alongside the sums
+// it already contains.
+const USA_REGIONAL_ZONES: Zone[] = ["US-CISO", "US-ERCO", "US-ISNE", "US-MISO", "US-NYIS", "US-PJM", "US-SWPP"];
 
 function CurrentShare() {
   const { from, to } = useFixedDateRange(7);
@@ -24,11 +32,12 @@ function CurrentShare() {
 }
 
 /**
- * USA deep-dive, mirroring Brazil's section (§2.7 in
- * docs/tasks/TASK-live-dashboard.md) but scoped to EIA's single US48
- * national aggregate — a regional (balancing-authority-level) breakdown
- * like Brazil's five subsystems is explicitly deferred (needs new EIA
- * respondent ingestion, not built this session).
+ * USA deep-dive, mirroring Brazil's section (§2.7/§2.8 in
+ * docs/tasks/TASK-live-dashboard.md). The national mix/diurnal/volatility
+ * charts stay scoped to EIA's US48 national aggregate, and the regional mix
+ * chart below adds the seven-RTO breakdown ingested in §2.8 — a US regional
+ * plant *map* (mirroring Brazil's) remains deferred pending a verified
+ * balancing-authority field on EIA-860.
  */
 export function UsaSection({ visibleMetrics }: { visibleMetrics: Metric[] }) {
   return (
@@ -37,7 +46,10 @@ export function UsaSection({ visibleMetrics }: { visibleMetrics: Metric[] }) {
         USA deep-dive
       </h2>
       <CurrentShare />
-      <GenerationMixChart source="EIA" zones={["US-US48"]} label="US48 national aggregate" visibleMetrics={visibleMetrics} />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <GenerationMixChart source="EIA" zones={["US-US48"]} label="US48 national aggregate" visibleMetrics={visibleMetrics} />
+        <RegionalMixChart source="EIA" zones={USA_REGIONAL_ZONES} label="RTO/ISO" visibleMetrics={visibleMetrics} />
+      </div>
       <DiurnalPatternChart source="EIA" zones={["US-US48"]} label="US48 national aggregate" visibleMetrics={visibleMetrics} />
       <VolatilityChart source="EIA" zones={["US-US48"]} />
     </section>
