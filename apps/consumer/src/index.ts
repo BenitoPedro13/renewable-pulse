@@ -1,9 +1,10 @@
 import { KafkaJS } from "@confluentinc/kafka-javascript";
 import { runMigrations } from "./db.js";
-import { persistReadings } from "./persist.js";
+import { processBatch } from "./batch.js";
 
 const brokers = process.env.REDPANDA_BROKERS ?? "localhost:19092";
 const topic = process.env.READINGS_TOPIC ?? "readings";
+const dlqTopic = process.env.READINGS_DLQ_TOPIC ?? "readings.dlq";
 
 async function main(): Promise<void> {
   await runMigrations();
@@ -23,8 +24,10 @@ async function main(): Promise<void> {
       fromBeginning: true,
     },
   });
+  const producer = kafka.producer();
 
   await consumer.connect();
+  await producer.connect();
   await consumer.subscribe({ topic });
 
   let processed = 0;
@@ -35,22 +38,20 @@ async function main(): Promise<void> {
         .filter((m) => m.value)
         .map((m) => JSON.parse(m.value!.toString("utf8")));
 
-      const { persisted, invalid } = await persistReadings(raws);
-      for (const { error } of invalid) {
-        // TASK-ingest-spine.md scopes DLQ routing to Phase 2
-        // (docs/tasks/TASK-implementation-plan.md §2). For Phase 1, log and
-        // skip rather than crash the consumer on the rest of the batch.
-        console.error("invalid reading, skipping (DLQ arrives in Phase 2):", error);
-      }
+      const { persisted, dlqRouted } = await processBatch(raws, {
+        producer,
+        dlqTopic,
+        sourceTopic: topic,
+      });
 
       processed += batch.messages.length;
       console.log(
-        `persist: batch of ${batch.messages.length} (persisted=${persisted} invalid=${invalid.length}), ${processed} processed so far`,
+        `persist: batch of ${batch.messages.length} (persisted=${persisted} dlqRouted=${dlqRouted}), ${processed} processed so far`,
       );
     },
   });
 
-  console.log(`persist consumer running: brokers=${brokers} topic=${topic}`);
+  console.log(`persist consumer running: brokers=${brokers} topic=${topic} dlq=${dlqTopic}`);
 }
 
 process.on("unhandledRejection", (reason) => {

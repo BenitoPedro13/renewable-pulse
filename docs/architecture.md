@@ -181,19 +181,33 @@ source than Landsnet itself, which is transmission-only.]`
 ## 5. Reliability patterns to build and document
 
 These are the explicit engineering deliverables that justify the "high-throughput ingestion
-without failing" framing:
+without failing" framing. All four are built as of Phase 2
+(`docs/tasks/TASK-reliability-layer.md`):
 
 1. **Idempotent consumers** — at-least-once delivery is the default posture for Kafka-style
-   brokers; duplicates are expected, not a bug. Verify with a test: replay the same poll
-   response twice, assert row count is unchanged.
+   brokers; duplicates are expected, not a bug. Verified by `persist.spec.ts`'s
+   replay-the-same-event-twice test (Phase 1) and live against a full 366k-row ONS poll
+   (`docs/tasks/TASK-ingest-spine.md` §6).
 2. **Dead-letter queue** — poison messages (schema mismatch, unknown zone) never block the
-   topic. Verify with a test: publish one malformed event inside a batch of valid ones, assert
-   the valid ones land in TimescaleDB and the malformed one lands in `readings.dlq`.
-3. **Backpressure** — a burst-publish test (e.g. replay a full day of ONS plant-level data at
-   once) should show bounded memory in the poller and steady (not exploding) consumer lag.
-4. **Observability** — DLQ depth, consumer lag, and last-successful-poll-per-source are the
-   three numbers the dashboard's own "pipeline health" panel shows — this is also a chance to
-   demonstrate the system honestly to a visitor, per §2.
+   topic. `apps/consumer`'s `processBatch` (`src/batch.ts`) publishes each one to `readings.dlq`
+   as `{ raw, error, source_topic, failed_at }` (`packages/contracts`' `dlqEventSchema`) instead
+   of dropping it; `apps/consumer/src/dlq-cli.ts` (`pnpm --filter consumer dlq -- list|replay`)
+   inspects and replays them. Verified by `batch.spec.ts`'s DLQ-routing test against real
+   Redpanda + TimescaleDB testcontainers.
+3. **Backpressure** — `apps/ingest`'s `publish.Publisher` bounds in-flight produce requests
+   (`MAX_IN_FLIGHT`), and the consumer's batched upserts are chunked to stay under Postgres's
+   65535-bind-parameter limit regardless of batch size (`persist.ts`'s `MAX_ROWS_PER_STATEMENT`
+   — a real bug `batch.spec.ts`'s 50k-row burst test caught: a single unchunked multi-row INSERT
+   at that size exceeds the limit). The live 366k-row Phase 1 run remains the reference proof at
+   full scale; the burst test is the automated regression guard.
+4. **Observability** — `GET /pipeline-health` on `apps/api` reports the three numbers the
+   dashboard's own "pipeline health" panel will show: DLQ depth and consumer lag (via the
+   Redpanda admin API's `fetchTopicOffsets`/`fetchOffsets`), and last-successful-poll-per-source
+   (`MAX(ingested_at)` per source, `null` for a source with no data yet rather than omitted —
+   this is also a chance to demonstrate the system honestly to a visitor, per §2). The
+   depth/lag arithmetic is unit-tested (`apps/api/src/lib/kafka-health.spec.ts`); the admin
+   client's own I/O against a real broker is verified manually rather than in the automated
+   suite — see `docs/tasks/TASK-reliability-layer.md` §6 for why.
 
 ## 6. Stack
 

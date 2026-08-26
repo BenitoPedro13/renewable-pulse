@@ -108,9 +108,24 @@ export async function persistReadings(raws: unknown[]): Promise<PersistBatchResu
   }
   const deduped = [...byKey.values()];
 
+  // Postgres caps a single statement at 65535 bind parameters. A batch
+  // larger than ~7280 rows (65535 / 9 columns) would blow past that in one
+  // multi-row INSERT — chunking keeps every statement well under the limit
+  // regardless of how large a caller's batch is (persist.spec.ts's burst
+  // test caught this at 50k rows; docs/tasks/TASK-reliability-layer.md).
+  for (let start = 0; start < deduped.length; start += MAX_ROWS_PER_STATEMENT) {
+    await insertChunk(deduped.slice(start, start + MAX_ROWS_PER_STATEMENT));
+  }
+
+  return { persisted: deduped.length, invalid };
+}
+
+const MAX_ROWS_PER_STATEMENT = 5000;
+
+async function insertChunk(events: ReadingEvent[]): Promise<void> {
   const values: unknown[] = [];
   const rows: string[] = [];
-  for (const [i, event] of deduped.entries()) {
+  for (const [i, event] of events.entries()) {
     const base = i * COLUMNS.length;
     const placeholders = COLUMNS.map((_, j) => `$${base + j + 1}`);
     rows.push(`(${placeholders.join(", ")})`);
@@ -128,6 +143,4 @@ export async function persistReadings(raws: unknown[]): Promise<PersistBatchResu
        schema_version = EXCLUDED.schema_version`,
     values,
   );
-
-  return { persisted: deduped.length, invalid };
 }

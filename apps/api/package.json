@@ -14,6 +14,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@confluentinc/kafka-javascript": "^1.10.0",
     "@renewable-pulse/contracts": "workspace:*",
     "fastify": "^5.12.1",
     "pg": "^8.23.0"
@@ -21,6 +22,7 @@
   "devDependencies": {
     "@renewable-pulse/config": "workspace:*",
     "@testcontainers/postgresql": "^12.1.0",
+    "@testcontainers/redpanda": "^12.1.0",
     "@types/pg": "^8.23.1",
     "eslint": "^10.9.1",
     "globals": "^17.11.0",

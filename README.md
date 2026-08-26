@@ -4,11 +4,14 @@ A live instrument panel for how much of the world's electricity already comes fr
 renewables — starting with Brazil's hydro-heavy grid, compared against a few countries that
 are already almost entirely renewable (Norway, Iceland) and the USA.
 
-**Status: Phase 1 (spine) complete.** ONS Brazil generation-by-plant data flows real, live,
-end-to-end: `apps/ingest` (Go) → Redpanda → `apps/consumer` (TS) → TimescaleDB → `apps/api`
-(Fastify). Verified against a live ONS poll (2026-08-26): 366,336 real plant/hour readings
-ingested and persisted with zero duplicates on replay. Phases 2–5 (reliability, ENTSO-E/EIA,
-dashboard, polish) are next — see `docs/tasks/TASK-implementation-plan.md`.
+**Status: Phase 2 (reliability layer) complete.** ONS Brazil generation-by-plant data flows real,
+live, end-to-end: `apps/ingest` (Go) → Redpanda → `apps/consumer` (TS) → TimescaleDB →
+`apps/api` (Fastify). Verified against a live ONS poll (2026-08-26): 366,336 real plant/hour
+readings ingested and persisted with zero duplicates on replay. Schema-invalid/unknown-zone
+readings now route to `readings.dlq` instead of being dropped (`pnpm --filter consumer dlq --
+list|replay` inspects/replays them), and `GET /pipeline-health` reports real DLQ depth, consumer
+lag, and last-successful-poll-per-source. Phases 3–5 (ENTSO-E/EIA, dashboard, polish) are next —
+see `docs/tasks/TASK-implementation-plan.md`.
 
 ## What this is
 
@@ -71,6 +74,11 @@ cd ../consumer && pnpm dev
 # 5. in another shell: serve the persisted rows over HTTP
 cd apps/api && pnpm dev
 curl "http://localhost:3001/readings?limit=10"
+curl "http://localhost:3001/pipeline-health"
+
+# 6. inspect or replay anything that landed in the DLQ
+cd ../consumer && pnpm dlq -- list
+pnpm dlq -- replay
 ```
 
 `docker exec renewable-pulse-timescaledb psql -U renewable_pulse -d renewable_pulse -c "SELECT count(*) FROM readings;"`
