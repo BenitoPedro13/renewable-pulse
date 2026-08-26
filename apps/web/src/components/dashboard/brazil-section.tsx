@@ -3,8 +3,10 @@
 import { GENERATION_SHARE_LABEL, useGenerationShare } from "@/hooks/use-generation-share";
 import { useGenerationLatest } from "@/hooks/use-generation-latest";
 import { useState } from "react";
+import { DiurnalPatternChart } from "@/components/dashboard/diurnal-pattern-chart";
 import { GenerationMixChart } from "@/components/dashboard/generation-mix-chart";
 import { PlantMap } from "@/components/dashboard/plant-map";
+import { RegionalMixChart } from "@/components/dashboard/regional-mix-chart";
 
 function useDateRange(days: number) {
   const [range] = useState(() => {
@@ -67,7 +69,11 @@ export function BrazilSection() {
         Brazil deep-dive
       </h2>
       <CurrentShare />
-      <GenerationMixChart />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <GenerationMixChart />
+        <RegionalMixChart />
+      </div>
+      <DiurnalPatternChart />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <PlantMap />
         <SubsystemTotals />

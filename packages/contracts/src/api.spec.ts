@@ -64,6 +64,28 @@ describe("live dashboard API schemas", () => {
     expect(result.success).toBe(false);
   });
 
+  it("accepts EIA/ENTSOE as generation-mix sources, not just ONS", () => {
+    const eia = generationMixQuerySchema.safeParse({
+      source: "EIA",
+      zone: "US-US48",
+      bucket: "day",
+      from: "2026-08-01T00:00:00Z",
+      to: "2026-08-08T00:00:00Z",
+    });
+    expect(eia.success).toBe(true);
+  });
+
+  it("still rejects a source outside sourceSchema's enum", () => {
+    const result = generationMixQuerySchema.safeParse({
+      source: "NOT-A-SOURCE",
+      zone: "BR-SE",
+      bucket: "day",
+      from: "2026-08-01T00:00:00Z",
+      to: "2026-08-08T00:00:00Z",
+    });
+    expect(result.success).toBe(false);
+  });
+
   it("rejects shares outside [0, 1]", () => {
     const result = generationShareRowSchema.safeParse({
       bucketStart: "2026-01-01T00:00:00Z",

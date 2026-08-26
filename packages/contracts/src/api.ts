@@ -59,7 +59,7 @@ export type PipelineHealthResponse = z.infer<typeof pipelineHealthResponseSchema
 const generationBucketSchema = z.enum(["hour", "day"]);
 
 export const generationMixQuerySchema = dateRangeSchema
-  .extend({ source: z.literal("ONS"), zone: csvArray(zoneSchema), bucket: generationBucketSchema })
+  .extend({ source: sourceSchema, zone: csvArray(zoneSchema), bucket: generationBucketSchema })
   .refine((q) => q.bucket !== "hour" || maxRange(MAX_HOURLY_DAYS)(q), `hour bucket range must be <= ${MAX_HOURLY_DAYS} days`)
   .refine((q) => q.bucket !== "day" || maxRange(MAX_DAILY_DAYS)(q), `day bucket range must be <= ${MAX_DAILY_DAYS} days`);
 export type GenerationMixQuery = z.infer<typeof generationMixQuerySchema>;
@@ -108,6 +108,7 @@ export const plantSchema = z.object({
   latitude: z.number(),
   longitude: z.number(),
 });
+export type Plant = z.infer<typeof plantSchema>;
 export const plantsResponseSchema = z.object({
   source: z.literal("ANEEL_SIGA"),
   attribution: z.string(),

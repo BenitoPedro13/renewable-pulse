@@ -2,6 +2,7 @@
 
 import type { GenerationShareResponse, Source } from "@renewable-pulse/contracts";
 import { useState } from "react";
+import { CompositionComparisonChart } from "@/components/dashboard/composition-comparison-chart";
 import { GENERATION_SHARE_LABEL, useGenerationShare } from "@/hooks/use-generation-share";
 
 // GET /generation-share is scoped per source, not per zone, so this panel
@@ -88,6 +89,7 @@ export function CountryComparisonSection() {
           <CountryCard key={source} country={country} grid={grid} row={latestRowFor(data.rows, source)} />
         ))}
       </div>
+      <CompositionComparisonChart />
     </section>
   );
 }

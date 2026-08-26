@@ -50,8 +50,24 @@ The state/provider architecture (`src/providers/query-provider.tsx`,
 `src/lib/live-client.ts`, one `queryOptions` factory + abstracted hook per REST endpoint) is built
 and verified live in a real browser against the running stack: the live indicator reaches
 "Live" (green) and the Pipeline Health section (§2.5.3) renders real DLQ depth/consumer
-lag/last-poll data with the correct "Not observed" state for ENTSOE/EIA. Brazil deep-dive,
-country comparison, the map, and §2.6's documentation/verification closeout are not yet built.
+lag/last-poll data with the correct "Not observed" state for ENTSOE/EIA. Brazil deep-dive and
+country comparison are now both built, verified against the real running stack (`apps/ingest` and
+`apps/consumer`'s `persist` group started for real — the database previously held only a one-time
+historical ONS backfill, no process was left running). Beyond §2.5's plan, both sections now also
+show real per-subsystem/per-source composition and diurnal patterns, not just the single hydro+
+wind+solar share number — see the deviation note below §2.1. The map renders real ANEEL SIGA
+markers (Mapbox token supplied from Flora's own `.env`, per `docs/brand.md`'s "browser-safe public
+client env var" rule) after a real bug was found and fixed: ANEEL's own CKAN resource repeats the
+same CEG across rows (a "daily" resource queried without a date filter), so `apps/api/src/routes/
+plants.ts` now dedupes by CEG. §2.6's documentation/verification closeout is not yet done.
+
+**Deviation from the original plan (2026-08-26, user-requested):** `GET /generation-mix`'s
+`source` param, originally scoped to the literal `"ONS"` (§2.1 below, for the Brazil chart only),
+is widened to accept any `sourceSchema` value — used for a real full generation-type composition
+comparison (Brazil vs USA), not just the single-number hydro+wind+solar share
+`GET /generation-share` already provided. The single-share endpoint/label stays as designed; the
+composition views are additive, each still strictly source-scoped so MWmed/MAW/MWh are never
+combined across sources.
 
 ### 2.1 Lock the API and live-message contracts first
 
