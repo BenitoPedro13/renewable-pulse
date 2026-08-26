@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Turborepo
+.turbo/
+
+# Build output
+dist/
+.next/
+build/
+
+# Go
+apps/ingest/ingest
+apps/ingest/*.exe
+
+# Env
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/

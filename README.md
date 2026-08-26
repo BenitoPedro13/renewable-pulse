@@ -4,8 +4,11 @@ A live instrument panel for how much of the world's electricity already comes fr
 renewables — starting with Brazil's hydro-heavy grid, compared against a few countries that
 are already almost entirely renewable (Norway, Iceland) and the USA.
 
-**Status: specs only.** Nothing is built yet. See `docs/tasks/TASK-implementation-plan.md` for
-the phased build order.
+**Status: Phase 1 (spine) complete.** ONS Brazil generation-by-plant data flows real, live,
+end-to-end: `apps/ingest` (Go) → Redpanda → `apps/consumer` (TS) → TimescaleDB → `apps/api`
+(Fastify). Verified against a live ONS poll (2026-08-26): 366,336 real plant/hour readings
+ingested and persisted with zero duplicates on replay. Phases 2–5 (reliability, ENTSO-E/EIA,
+dashboard, polish) are next — see `docs/tasks/TASK-implementation-plan.md`.
 
 ## What this is
 
@@ -45,3 +48,30 @@ See `docs/architecture.md` §3 for access details and open `[VERIFY]` items.
 Go (ingestion edge) · Redpanda · TimescaleDB · TypeScript/Node (consumers, API) · Next.js
 (dashboard) · Zod (contracts) · pnpm + Turborepo. See `docs/architecture.md` §6 for the
 rationale behind each choice.
+
+## Quickstart (Phase 1 spine)
+
+```sh
+cp .env.example .env   # then `set -a; source .env; set +a` or export the vars into your shell
+
+# 1. bring up Redpanda + TimescaleDB
+cd infra && docker-compose up -d
+docker exec renewable-pulse-redpanda rpk topic create readings readings.dlq
+
+# 2. build + run the TS workspace
+cd .. && pnpm install
+pnpm --filter @renewable-pulse/contracts build
+
+# 3. poll ONS once and publish to Redpanda (real network call, real data)
+cd apps/ingest && go run . --once
+
+# 4. consume + persist into TimescaleDB (runs migrations on startup)
+cd ../consumer && pnpm dev
+
+# 5. in another shell: serve the persisted rows over HTTP
+cd apps/api && pnpm dev
+curl "http://localhost:3001/readings?limit=10"
+```
+
+`docker exec renewable-pulse-timescaledb psql -U renewable_pulse -d renewable_pulse -c "SELECT count(*) FROM readings;"`
+and Redpanda Console at `http://localhost:8080` are useful for watching the pipeline directly.

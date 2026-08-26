@@ -34,19 +34,24 @@ Scaffold the full repo structure from `docs/architecture.md` §9 and build the P
    `{ source, zone, asset_id: string | null, metric, value, unit, recorded_at, ingested_at, schema_version }`.
    `source` starts as a literal `"ONS"` (extend to a union once Phase 3 adds ENTSO-E/EIA).
    `zone` starts constrained to the five ONS subsystem codes (`BR-N`, `BR-NE`, `BR-S`, `BR-SE`,
-   `BR-CO`) via a Zod enum, extended later. `metric` covers the four `nom_tipousina` values
-   normalized to English source names (`hydro`, `thermal`, `wind`, `solar`).
+   `BR-CO`) via a Zod enum, extended later. `metric` covers the five `nom_tipousina` values
+   actually observed in a live poll, normalized to English source names (`hydro`, `thermal`,
+   `wind`, `solar`, `nuclear` — nuclear kept distinct from thermal rather than folded in).
 3. **`packages/config`** — shared `tsconfig`/`eslint`/`prettier`, `base` variant only for now
    (no Next.js/Nest variant needed until Phase 4's `apps/web`).
 4. **`apps/ingest`** (Go, via `go mod init`) — one poller:
    - Fetch the current month's ONS CSV from the confirmed S3 URL pattern.
    - Parse semicolon-delimited CSV (Go stdlib `encoding/csv` with `Comma = ';'`).
    - Normalize each row to the canonical event: `id_subsistema` → `zone` (prefixed `BR-`),
-     `nom_tipousina` → `metric` (mapped hydro/thermal/wind/solar), `id_ons` → `asset_id` (`null`
-     when empty, i.e. aggregated MMGD/`Conjunto de Usinas` rows), `val_geracao` → `value`, unit
-     `"MW"` (per architecture.md §3's still-open dictionary-confirmation note — track as a
-     follow-up, doesn't block Phase 1 since the pipeline just needs *a* consistent unit today),
-     `din_instante` → `recorded_at`, poll time → `ingested_at`, `schema_version: 1`.
+     `nom_tipousina` → `metric` (mapped hydro/thermal/wind/solar/nuclear), `id_ons` → `asset_id`,
+     falling back to `nom_usina` (not `null`) when `id_ons` is empty — ONS's per-state small-plant
+     aggregate rows share a zone+metric+hour across states and need `nom_usina` to stay distinct
+     under the idempotency key (architecture.md §3 has the full story, found empirically during
+     this task), `val_geracao` → `value`, unit
+     `"MWmed"` (confirmed against ONS's own data dictionary — architecture.md §3), `din_instante`
+     → `recorded_at` (timezone unresolved, see architecture.md §3's `[VERIFY]` — treated as
+     `America/Sao_Paulo` (UTC-3, fixed, no DST since 2019) for now, called out explicitly in code
+     rather than assumed silently), poll time → `ingested_at`, `schema_version: 1`.
    - Track a per-zone high-water mark (`recorded_at` of the last published row) in memory for
      Phase 1 (persisted state is a Phase 2 reliability concern) so re-polling the same file
      doesn't republish everything — but idempotent upsert (step 6) is the actual safety net.
@@ -110,3 +115,48 @@ Matches `TASK-implementation-plan.md` §2 Phase 1 verification, checked in order
    contracts DTO.
 6. `pnpm turbo run lint typecheck` passes across the TS workspace; `go vet ./...` and
    `go build ./...` pass for `apps/ingest`.
+
+## 6. Verification results (2026-08-26)
+
+All six checks above passed against real infra and a real live ONS poll — no fixtures, no
+synthetic data:
+
+1. `docker-compose up` in `infra/` brings up Redpanda + Redpanda Console + TimescaleDB cleanly;
+   confirmed via `docker ps` (all three containers healthy) and a manual `CREATE EXTENSION
+   timescaledb` check.
+2. `apps/ingest --once` fetched the live August 2026 ONS file
+   (`GERACAO_USINA-2_2026_08.csv`, ~53 MB at poll time) and published **366,336** real events to
+   the `readings` topic (48,960 rows skipped: the trailing hour's not-yet-verified empty
+   `val_geracao` values, an expected real-data characteristic, not a bug).
+3. `apps/consumer` persisted all 366,336 published events into TimescaleDB as exactly 366,336
+   rows — full 1:1 correspondence, zero collisions.
+4. **Idempotency, proven at full scale**: ran `apps/ingest --once` a second time against the
+   live file (366,336 more events, 732,672 total across both runs) and let `apps/consumer`
+   process the combined backlog. Final row count: still exactly **366,336**. Re-polling the same
+   real month's data twice produced zero duplicate rows.
+5. `GET /readings` (Fastify, `apps/api`) returned real persisted rows as valid JSON over HTTP,
+   confirmed with `limit` and `since` query params against live data.
+6. `pnpm turbo run typecheck lint build test` passes clean across all 4 workspace packages (20
+   tests, all against real infra — testcontainers Postgres for `apps/consumer` and `apps/api`,
+   no mocked DB). `go vet ./...`, `go build ./...`, `gofmt -l .`, and `go test ./...` all pass for
+   `apps/ingest`.
+
+**Two real bugs found and fixed during verification, not before it** — this is why running the
+real pipeline end-to-end mattered more than trusting the design on paper:
+
+- **Consumer throughput.** The original `eachMessage`-based consumer (one `INSERT` per Kafka
+  message) processed ~25–40 msg/s — at that rate the real 366k-row backlog would take 2–4 hours,
+  which doesn't hold up against architecture.md §2's "bursty batches of real events per poll
+  cycle" framing. Rewrote to `eachBatch` + a single multi-row `ON CONFLICT` upsert per batch
+  (`apps/consumer/src/persist.ts`'s `persistReadings`, batch size 5000 via
+  `js.consumer.max.batch.size`). Confirmed live: the same 366k-row backlog now drains in well
+  under a minute.
+- **Idempotency-key collision on ONS's own aggregate rows.** A live poll showed ~16% of rows
+  losing their idempotency race: ONS's per-state "Pequenas Usinas" small-plant aggregate rows
+  (e.g. `PQU DFGO HID`, `PQU MGGO HID`) share an empty `id_ons`, and several of them share the
+  same zone+metric+hour too (one per state/interconnection pair) — a plain `asset_id: null`
+  collided them under the composite key and silently kept only the last one written. Fixed by
+  falling back to `nom_usina` (ONS's own name for the aggregate group, confirmed unique within
+  it) as `asset_id` instead of `null` whenever `id_ons` is empty (`apps/ingest/internal/ons/normalize.go`).
+  Locked in with `apps/ingest/internal/ons/normalize_test.go`. `docs/architecture.md` §3 updated
+  to match — this was a schema-shape correction, not a new field.

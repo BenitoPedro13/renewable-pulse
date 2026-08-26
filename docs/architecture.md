@@ -81,13 +81,26 @@ dump hosted on S3, refreshed twice daily per the cadence above. Confirmed via a 
   `din_instante;id_subsistema;nom_subsistema;id_estado;nom_estado;cod_modalidadeoperacao;nom_tipousina;nom_tipocombustivel;nom_usina;id_ons;ceg;val_geracao`
   — `din_instante` (timestamp, `YYYY-MM-DD HH:MM:SS`) → `recorded_at`; `id_subsistema`
   (`N`/`NE`/`S`/`SE`/`CO`) → `zone` (prefix `BR-` per our zone-code convention, e.g. `BR-N`);
-  `nom_tipousina` (`HIDROELÉTRICA`/`TÉRMICA`/`EOLIELÉTRICA`/`FOTOVOLTAICA`) → `metric`'s source
-  category; `id_ons` → `asset_id` (empty for aggregated MMGD/`Conjunto de Usinas` rows — those
-  map to `asset_id: null`); `val_geracao` → `value` (MW — `[VERIFY: confirm MW vs. MWh against
-  the "Dicionário de Dados" PDF at
-  https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/geracao_usina_2_ho/DicionarioDados_GeracaoPorUsina.pdf
-  before Phase 3's cross-source unit normalization — val_geracao reads as an instantaneous MW
-  figure per hour-bucket based on the sample values seen, but the dictionary should confirm]`).
+  `nom_tipousina` (`HIDROELÉTRICA`/`TÉRMICA`/`EOLIELÉTRICA`/`FOTOVOLTAICA`/`NUCLEAR`) →
+  `metric`'s source category (`nuclear` kept distinct from `thermal` — see
+  `packages/contracts/src/event.ts`); `id_ons` → `asset_id`, **except**: `id_ons` is empty for
+  ONS's per-state "Pequenas Usinas" small-plant aggregate rows (e.g. `PQU DFGO HID`), and several
+  of those share the same zone+metric+hour (one per state/interconnection pair) — a plain
+  `asset_id: null` would collide them under the idempotency key and silently drop all but the
+  last (caught empirically: a live poll showed ~16% of rows colliding this way before the fix).
+  `nom_usina` is ONS's own name for the aggregate group and is unique within it (verified
+  2026-08-26), so `apps/ingest` uses it as `asset_id` whenever `id_ons` is empty, instead of
+  `null` — `packages/contracts` doesn't need a schema change for this, `asset_id` was always
+  `string | null`, only what gets put in it changed; `val_geracao` → `value`, unit **`MWmed`** —
+  confirmed against the dataset's own "Dicionário de Dados" PDF
+  (`https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/geracao_usina_2_ho/DicionarioDados_GeracaoPorUsina.pdf`,
+  which labels the field `val_geracao: "Geração de Energia na unidade de medida MWmed"` — average
+  MW over the hour, not a plain instantaneous MW reading and not MWh. Track this label explicitly
+  when normalizing ENTSO-E/EIA units in Phase 3 — don't assume they share it.
+  `[VERIFY: the same dictionary PDF does not state a timezone for din_instante (format is just
+  "YYYY-MM-DD HH:MM:SS") — resolve whether it's UTC or America/Sao_Paulo (Brazil has used a fixed
+  UTC-3 offset, no DST, since 2019) before Phase 1's poller treats recorded_at as authoritative;
+  apps/ingest marks this assumption explicitly in code rather than silently picking one.]`
 - **Poller design implication:** this is a full-month-file download, not an incremental query —
   the poller must fetch the current month's CSV each cycle and filter to rows newer than its own
   last-seen `recorded_at` high-water mark per zone before publishing, relying on the idempotent
