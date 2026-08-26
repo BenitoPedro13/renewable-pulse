@@ -351,6 +351,19 @@ judgment, but document your choices").
 - `useFixedDateRange`, a shared hook replacing five near-identical local `useState(() => ({from,
   to}))` implementations across chart components.
 
+**Also built (plant leaderboard + volatility):** A new `GET /generation-top-assets` endpoint
+(`packages/contracts/src/api.ts`, `apps/api/src/routes/generation-top-assets.ts`) ranks individual
+real ONS plants by average output for one fuel type over a window — the plant-level granularity
+(`readings.asset_id`) the pipeline already ingests but every other endpoint aggregates away.
+ONS-only by design: EIA/ENTSO-E readings don't carry individual-plant granularity, only
+respondent/zone-level. Queries the raw `readings` hypertable directly (not the zone-level
+`generation_hourly` continuous aggregate). Verified live: top hydro plant is `PRIT60` (Itaipu-scale
+output), top wind plants all cluster in `BR-NE`, matching `RegionalMixChart`'s own finding that the
+Northeast is the wind-heavy subsystem. `PlantLeaderboard` (Brazil-only, per-fuel-type tabs) and
+`VolatilityChart` (coefficient of variation of real hourly output per fuel type, computed
+client-side from the same hourly `generation-mix` data the diurnal chart already fetches — no new
+endpoint needed) are wired into both `BrazilSection` and `UsaSection`.
+
 **Explicitly deferred (bigger, separate scope — not started this session):** EIA balancing-
 authority-level generation (CISO/ERCOT/PJM/MISO/SWPP/...) for a true US-regional mix comparison
 mirroring Brazil's 5 subsystems (also needed for a real US-regional map, since EIA-860's own

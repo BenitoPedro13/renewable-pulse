@@ -98,6 +98,38 @@ export const generationLatestQuerySchema = z.object({ source: z.literal("ONS"), 
 export const generationLatestResponseSchema = z.object({ readings: z.array(readingEventSchema) });
 export type GenerationLatestResponse = z.infer<typeof generationLatestResponseSchema>;
 
+const MAX_TOP_ASSETS_DAYS = 35;
+
+/**
+ * GET /generation-top-assets query params — ranks individual real ONS
+ * plants (readings.asset_id) by average output over a window, added
+ * 2026-08-26 (docs/tasks/TASK-live-dashboard.md §2.7) for a per-plant
+ * leaderboard. `source` is currently ONS-only: EIA's and ENTSO-E's own
+ * readings don't carry individual-plant asset_id granularity, only
+ * zone/respondent-level. A single `metric` is required (not an array) —
+ * "top plants" is inherently a single-fuel-type ranking, not a mixed one.
+ */
+export const generationTopAssetsQuerySchema = dateRangeSchema
+  .extend({
+    source: z.literal("ONS"),
+    zone: csvArray(zoneSchema).optional(),
+    metric: metricSchema,
+    limit: z.coerce.number().int().min(1).max(50).optional().default(10),
+  })
+  .refine(maxRange(MAX_TOP_ASSETS_DAYS), `range must be <= ${MAX_TOP_ASSETS_DAYS} days`);
+export type GenerationTopAssetsQuery = z.infer<typeof generationTopAssetsQuerySchema>;
+
+export const generationTopAssetsRowSchema = z.object({
+  assetId: z.string(),
+  zone: zoneSchema,
+  metric: metricSchema,
+  avgValue: z.number(),
+  unit: unitSchema,
+  readingCount: z.number().int().min(1),
+});
+export const generationTopAssetsResponseSchema = z.object({ rows: z.array(generationTopAssetsRowSchema) });
+export type GenerationTopAssetsResponse = z.infer<typeof generationTopAssetsResponseSchema>;
+
 export const plantRegistrySourceSchema = z.enum(["ANEEL_SIGA", "EIA_860"]);
 export type PlantRegistrySource = z.infer<typeof plantRegistrySourceSchema>;
 

@@ -7,6 +7,7 @@ import { LiveHub } from "./live/hub.js";
 import { generationLatestRoute } from "./routes/generation-latest.js";
 import { generationMixRoute } from "./routes/generation-mix.js";
 import { generationShareRoute } from "./routes/generation-share.js";
+import { generationTopAssetsRoute } from "./routes/generation-top-assets.js";
 import { liveRoute } from "./routes/live.js";
 import { pipelineHealthRoute } from "./routes/pipeline-health.js";
 import { plantsRoute } from "./routes/plants.js";
@@ -37,6 +38,7 @@ await app.register(pipelineHealthRoute);
 await app.register(generationMixRoute);
 await app.register(generationLatestRoute);
 await app.register(generationShareRoute);
+await app.register(generationTopAssetsRoute);
 await app.register(plantsRoute);
 await app.register(async (instance) => liveRoute(instance, hub));
 

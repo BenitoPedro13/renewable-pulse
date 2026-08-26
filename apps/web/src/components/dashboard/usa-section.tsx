@@ -3,6 +3,7 @@
 import type { Metric } from "@renewable-pulse/contracts";
 import { DiurnalPatternChart } from "@/components/dashboard/diurnal-pattern-chart";
 import { GenerationMixChart } from "@/components/dashboard/generation-mix-chart";
+import { VolatilityChart } from "@/components/dashboard/volatility-chart";
 import { GENERATION_SHARE_LABEL, useGenerationShare } from "@/hooks/use-generation-share";
 import { useFixedDateRange } from "@/hooks/use-fixed-date-range";
 
@@ -38,6 +39,7 @@ export function UsaSection({ visibleMetrics }: { visibleMetrics: Metric[] }) {
       <CurrentShare />
       <GenerationMixChart source="EIA" zones={["US-US48"]} label="US48 national aggregate" visibleMetrics={visibleMetrics} />
       <DiurnalPatternChart source="EIA" zones={["US-US48"]} label="US48 national aggregate" visibleMetrics={visibleMetrics} />
+      <VolatilityChart source="EIA" zones={["US-US48"]} />
     </section>
   );
 }

@@ -7,8 +7,10 @@ import { useGenerationLatest } from "@/hooks/use-generation-latest";
 import { useFixedDateRange } from "@/hooks/use-fixed-date-range";
 import { DiurnalPatternChart } from "@/components/dashboard/diurnal-pattern-chart";
 import { GenerationMixChart } from "@/components/dashboard/generation-mix-chart";
+import { PlantLeaderboard } from "@/components/dashboard/plant-leaderboard";
 import { PlantMap } from "@/components/dashboard/plant-map";
 import { RegionalMixChart } from "@/components/dashboard/regional-mix-chart";
+import { VolatilityChart } from "@/components/dashboard/volatility-chart";
 
 const ONS_ZONES = zoneSchema.options.filter((zone): zone is Zone & `BR-${string}` => zone.startsWith("BR-"));
 
@@ -69,6 +71,10 @@ export function BrazilSection({ visibleMetrics }: { visibleMetrics: Metric[] }) 
         <RegionalMixChart visibleMetrics={visibleMetrics} />
       </div>
       <DiurnalPatternChart source="ONS" zones={ONS_ZONES} label="all subsystems" visibleMetrics={visibleMetrics} />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <PlantLeaderboard />
+        <VolatilityChart source="ONS" zones={ONS_ZONES} />
+      </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <PlantMap />
         <SubsystemTotals />
