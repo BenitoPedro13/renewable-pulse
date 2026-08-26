@@ -15,7 +15,7 @@ import (
 // code — the official user-guide pages returned 400/503 when checked live).
 const baseURL = "https://web-api.tp.entsoe.eu/api"
 
-// Zone is one Norwegian bidding zone this poller covers, pairing our
+// Zone is one ENTSO-E bidding zone this poller covers, pairing our
 // canonical zone code with ENTSO-E's own EIC domain code.
 type Zone struct {
 	// Code is our canonical zone (e.g. "NO-NO1").
@@ -24,14 +24,17 @@ type Zone struct {
 	EIC string
 }
 
-// Zones are the five Norwegian bidding zones, confirmed against entsoe-py's
-// mappings.py (docs/tasks/TASK-entsoe-eia-pollers.md §1).
+// Zones are the five Norwegian bidding zones plus the Netherlands' single
+// bidding zone, all confirmed against entsoe-py's mappings.py
+// (docs/tasks/TASK-entsoe-eia-pollers.md §1; NL added 2026-08-26, same
+// source).
 var Zones = []Zone{
 	{Code: "NO-NO1", EIC: "10YNO-1--------2"},
 	{Code: "NO-NO2", EIC: "10YNO-2--------T"},
 	{Code: "NO-NO3", EIC: "10YNO-3--------J"},
 	{Code: "NO-NO4", EIC: "10YNO-4--------9"},
 	{Code: "NO-NO5", EIC: "10Y1001A1001A48H"},
+	{Code: "NL", EIC: "10YNL----------L"},
 }
 
 const periodLayout = "200601021504"

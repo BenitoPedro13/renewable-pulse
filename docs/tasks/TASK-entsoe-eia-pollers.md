@@ -187,3 +187,25 @@ The user registered for an EIA key (`eia.gov/opendata`, instant) and it was used
    in what fraction of US48's actual generation the pipeline captured. Fixed in
    `apps/ingest/internal/eia/normalize.go`'s `metricByFuelType` map; `normalize_test.go` extended to
    cover all 16 codes.
+
+### 5.2 Netherlands ENTSO-E bidding zone — added 2026-08-26
+
+Added `NL` (EIC `10YNL----------L`) to `apps/ingest/internal/entsoe/client.go`'s `Zones` list and
+`packages/contracts/src/event.ts`'s `zoneSchema`, per user request. Confirmed against the same
+source the five Norway zones were already verified against (`entsoe-py`'s `mappings.py`), not
+invented — cross-checked that entsoe-py's Norway entries match this repo's existing EIC codes
+exactly before trusting its Netherlands entry. No new `psrType`/metric mapping was needed: the
+existing table in §1 above is generic per-fuel-type, not Norway-specific.
+
+**Still blocked on the same open item as the rest of ENTSO-E**: this makes the poller *ready* to
+cover the Netherlands the moment `ENTSOE_API_TOKEN` exists, but cannot be live-verified until then
+— the hard constraint (no synthetic data) means `apps/web`'s dashboard correctly shows no ENTSO-E
+readings for either country in the meantime.
+
+On the dashboard: `GET /generation-share` is scoped per `source`, not per `zone`, so Norway and the
+Netherlands both feed the same `ENTSOE` bucket (`apps/web/src/components/dashboard/
+country-comparison-section.tsx` labels it "Europe (Norway + Netherlands)" rather than implying a
+single country). Splitting this into separate per-country panels — a real `generation-share`
+API change to group by zone as well as source — is deliberately deferred until ENTSO-E access
+actually exists (user decision, 2026-08-26): no reason to design that contract before there's real
+data to distinguish.

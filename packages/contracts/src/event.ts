@@ -1,9 +1,12 @@
 import { z } from "zod";
 
 /**
- * ONS subsystem codes (BR-<id_subsistema>), ENTSO-E Norwegian bidding zones
- * (NO-NO1..NO-NO5), and EIA's US48 national aggregate (docs/architecture.md
- * §3, Phase 3) — do not silently widen this to z.string().
+ * ONS subsystem codes (BR-<id_subsistema>), ENTSO-E bidding zones (Norway's
+ * five NO-NO1..NO-NO5 plus the Netherlands' single NL bidding zone — EIC
+ * `10YNL----------L`, confirmed against entsoe-py's own mappings.py, the
+ * same trusted source the Norway zones were verified against), and EIA's
+ * US48 national aggregate (docs/architecture.md §3, Phase 3) — do not
+ * silently widen this to z.string().
  */
 export const zoneSchema = z.enum([
   "BR-N",
@@ -16,6 +19,7 @@ export const zoneSchema = z.enum([
   "NO-NO3",
   "NO-NO4",
   "NO-NO5",
+  "NL",
   "US-US48",
 ]);
 export type Zone = z.infer<typeof zoneSchema>;

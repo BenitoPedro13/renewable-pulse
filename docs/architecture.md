@@ -118,7 +118,9 @@ Guide/Postman doc pages returned 400/503 when checked live; resolved instead via
 type is `documentType=A75` (Actual generation per type), `processType=A16` (Realised),
 `in_Domain={EIC area code}` (Norway's five bidding zones: `NO1`→`10YNO-1--------2`,
 `NO2`→`10YNO-2--------T`, `NO3`→`10YNO-3--------J`, `NO4`→`10YNO-4--------9`,
-`NO5`→`10Y1001A1001A48H`), `periodStart`/`periodEnd` as `YYYYMMDDHHmm` UTC. Response is XML
+`NO5`→`10Y1001A1001A48H`; plus the Netherlands' single bidding zone, `NL`→
+`10YNL----------L`, added 2026-08-26 against the same entsoe-py source),
+`periodStart`/`periodEnd` as `YYYYMMDDHHmm` UTC. Response is XML
 `GL_MarketDocument` (or `Acknowledgement_MarketDocument` + `Reason/text` on error/no-data — the
 poller detects this root element rather than trying to parse it as data); each `TimeSeries` has
 `MktPSRType/psrType` (fuel-type code), `inBiddingZone_Domain.mRID` (generation) vs.
