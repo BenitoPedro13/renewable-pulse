@@ -1,3 +1,4 @@
+import { BrazilSection } from "@/components/dashboard/brazil-section";
 import { CountryComparisonSection } from "@/components/dashboard/country-comparison-section";
 import { LiveIndicator } from "@/components/dashboard/live-indicator";
 import { PipelineHealthSection } from "@/components/dashboard/pipeline-health-section";
@@ -14,6 +15,7 @@ export default function Home() {
           A live instrument panel for how much of the world&apos;s electricity already comes from renewables.
         </p>
       </header>
+      <BrazilSection />
       <CountryComparisonSection />
       <PipelineHealthSection />
     </main>
