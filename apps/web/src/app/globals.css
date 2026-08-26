@@ -1,4 +1,7 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
 
 @theme {
   /* AlignUI Raw Colors */
@@ -17,7 +20,7 @@
   --color-gray-alpha-24: oklch(71.55% 0.0000 0 / 24%);
   --color-gray-alpha-16: oklch(71.55% 0.0000 0 / 16%);
   --color-gray-alpha-10: oklch(71.55% 0.0000 0 / 10%);
-  
+
   --color-slate-950: oklch(18.26% 0.0196 265.90);
   --color-slate-900: oklch(22.37% 0.0201 271.70);
   --color-slate-800: oklch(26.63% 0.0210 272.98);
@@ -221,7 +224,7 @@
   /* AlignUI Semantic Colors */
   --color-static-black: var(--color-neutral-950);
   --color-static-white: var(--color-neutral-0);
-  
+
   --color-bg-strong-950: var(--color-neutral-950);
   --color-bg-surface-800: var(--color-neutral-800);
   --color-bg-sub-300: var(--color-neutral-300);
@@ -292,195 +295,170 @@
   --color-stable-lighter: var(--color-teal-50);
 
   /* AlignUI Typography System - Dynamic from tokens.ts */
-  
+
   --text-title-h1: 3.5rem;
   --text-title-h1--line-height: 4rem;
   --text-title-h1--letter-spacing: -0.01em;
   --text-title-h1--font-weight: 500;
-  
-  
+
   --text-title-h2: 3rem;
   --text-title-h2--line-height: 3.5rem;
   --text-title-h2--letter-spacing: -0.01em;
   --text-title-h2--font-weight: 500;
-  
-  
+
   --text-title-h3: 2.5rem;
   --text-title-h3--line-height: 3rem;
   --text-title-h3--letter-spacing: -0.01em;
   --text-title-h3--font-weight: 500;
-  
-  
+
   --text-title-h4: 2rem;
   --text-title-h4--line-height: 2.5rem;
   --text-title-h4--letter-spacing: -0.005em;
   --text-title-h4--font-weight: 500;
-  
-  
+
   --text-title-h5: 1.5rem;
   --text-title-h5--line-height: 2rem;
   --text-title-h5--letter-spacing: 0em;
   --text-title-h5--font-weight: 500;
-  
-  
+
   --text-title-h6: 1.25rem;
   --text-title-h6--line-height: 1.75rem;
   --text-title-h6--letter-spacing: 0em;
   --text-title-h6--font-weight: 500;
-  
-  
+
   --text-label-xl: 1.5rem;
   --text-label-xl--line-height: 2rem;
   --text-label-xl--letter-spacing: -0.015em;
   --text-label-xl--font-weight: 500;
-  
-  
+
   --text-label-lg: 1.125rem;
   --text-label-lg--line-height: 1.5rem;
   --text-label-lg--letter-spacing: -0.015em;
   --text-label-lg--font-weight: 500;
-  
-  
+
   --text-label-md: 1rem;
   --text-label-md--line-height: 1.5rem;
   --text-label-md--letter-spacing: -0.011em;
   --text-label-md--font-weight: 500;
-  
-  
+
   --text-label-sm: .875rem;
   --text-label-sm--line-height: 1.25rem;
   --text-label-sm--letter-spacing: -0.006em;
   --text-label-sm--font-weight: 500;
-  
-  
+
   --text-label-xs: .75rem;
   --text-label-xs--line-height: 1rem;
   --text-label-xs--letter-spacing: 0em;
   --text-label-xs--font-weight: 500;
-  
-  
+
   --text-label-2xs: .6875rem;
   --text-label-2xs--line-height: 1rem;
   --text-label-2xs--letter-spacing: 0em;
   --text-label-2xs--font-weight: 500;
-  
-  
+
   --text-paragraph-xl: 1.5rem;
   --text-paragraph-xl--line-height: 2rem;
   --text-paragraph-xl--letter-spacing: -0.015em;
   --text-paragraph-xl--font-weight: 400;
-  
-  
+
   --text-paragraph-lg: 1.125rem;
   --text-paragraph-lg--line-height: 1.5rem;
   --text-paragraph-lg--letter-spacing: -0.015em;
   --text-paragraph-lg--font-weight: 400;
-  
-  
+
   --text-paragraph-md: 1rem;
   --text-paragraph-md--line-height: 1.5rem;
   --text-paragraph-md--letter-spacing: -0.011em;
   --text-paragraph-md--font-weight: 400;
-  
-  
+
   --text-paragraph-sm: .875rem;
   --text-paragraph-sm--line-height: 1.25rem;
   --text-paragraph-sm--letter-spacing: -0.006em;
   --text-paragraph-sm--font-weight: 400;
-  
-  
+
   --text-paragraph-xs: .75rem;
   --text-paragraph-xs--line-height: 1rem;
   --text-paragraph-xs--letter-spacing: 0em;
   --text-paragraph-xs--font-weight: 400;
-  
-  
+
   --text-subheading-md: 1rem;
   --text-subheading-md--line-height: 1.5rem;
   --text-subheading-md--letter-spacing: 0.06em;
   --text-subheading-md--font-weight: 500;
-  
-  
+
   --text-subheading-sm: .875rem;
   --text-subheading-sm--line-height: 1.25rem;
   --text-subheading-sm--letter-spacing: 0.06em;
   --text-subheading-sm--font-weight: 500;
-  
-  
+
   --text-subheading-xs: .75rem;
   --text-subheading-xs--line-height: 1rem;
   --text-subheading-xs--letter-spacing: 0.04em;
   --text-subheading-xs--font-weight: 500;
-  
-  
+
   --text-subheading-2xs: .6875rem;
   --text-subheading-2xs--line-height: .75rem;
   --text-subheading-2xs--letter-spacing: 0.02em;
   --text-subheading-2xs--font-weight: 500;
-  
-  
+
   --text-doc-label: 1.125rem;
   --text-doc-label--line-height: 2rem;
   --text-doc-label--letter-spacing: -0.015em;
   --text-doc-label--font-weight: 500;
-  
-  
+
   --text-doc-paragraph: 1.125rem;
   --text-doc-paragraph--line-height: 2rem;
   --text-doc-paragraph--letter-spacing: -0.015em;
   --text-doc-paragraph--font-weight: 400;
-  
-  
 
   /* AlignUI Shadow System - Dynamic from tokens.ts */
-  
+
   --shadow-regular-xs: 0 1px 2px 0 #0a0d1408;
-  
+
   --shadow-regular-sm: 0 2px 4px #1b1c1d0a;
-  
+
   --shadow-regular-md: 0 16px 32px -12px #0e121b1a;
-  
+
   --shadow-button-primary-focus: 0 0 0 2px var(--color-bg-white-0), 0 0 0 4px var(--color-primary-alpha-10);
-  
+
   --shadow-button-important-focus: 0 0 0 2px var(--color-bg-white-0), 0 0 0 4px var(--color-neutral-alpha-16);
-  
+
   --shadow-button-error-focus: 0 0 0 2px var(--color-bg-white-0), 0 0 0 4px var(--color-red-alpha-10);
-  
+
   --shadow-fancy-buttons-neutral: 0 1px 2px 0 #1b1c1d7a, 0 0 0 1px #242628;
-  
+
   --shadow-fancy-buttons-primary: 0 1px 2px 0 #0e121b3d, 0 0 0 1px var(--color-primary-base);
-  
+
   --shadow-fancy-buttons-error: 0 1px 2px 0 #0e121b3d, 0 0 0 1px var(--color-error-base);
-  
+
   --shadow-fancy-buttons-stroke: 0 1px 3px 0 #0e121b1f, 0 0 0 1px var(--color-stroke-soft-200);
-  
+
   --shadow-toggle-switch: 0 6px 10px 0 #0e121b0f, 0 2px 4px 0 #0e121b08;
-  
+
   --shadow-switch-thumb: 0 4px 8px 0 #1b1c1d0f, 0 2px 4px 0 #0e121b14;
-  
+
   --shadow-tooltip: 0 12px 24px 0 #0e121b0f, 0 1px 2px 0 #0e121b08;
-  
+
   --shadow-custom-xs: 0 0 0 1px rgba(51, 51, 51, 0.04), 0 4px 8px -2px rgba(51, 51, 51, 0.06), 0 2px 4px rgba(51, 51, 51, 0.04), 0 1px 2px rgba(51, 51, 51, 0.04), inset 0 -1px 1px -0.5px rgba(51, 51, 51, 0.06);
-  
+
   --shadow-custom-sm: 0 0 0 1px rgba(51, 51, 51, 0.04), 0 16px 8px -8px rgba(51, 51, 51, 0.01), 0 12px 6px -6px rgba(51, 51, 51, 0.02), 0 5px 5px -2.5px rgba(51, 51, 51, 0.08), 0 1px 3px -1.5px rgba(51, 51, 51, 0.16), inset 0 -0.5px 0.5px rgba(51, 51, 51, 0.08);
-  
+
   --shadow-custom-md: 0 0 0 1px rgba(51, 51, 51, 0.04), 0 1px 1px 0.5px rgba(51, 51, 51, 0.04), 0 3px 3px -1.5px rgba(51, 51, 51, 0.02), 0 6px 6px -3px rgba(51, 51, 51, 0.04), 0 12px 12px -6px rgba(51, 51, 51, 0.04), 0 24px 24px -12px rgba(51, 51, 51, 0.04), 0 48px 48px -24px rgba(51, 51, 51, 0.04), inset 0 -1px 1px -0.5px rgba(51, 51, 51, 0.06);
-  
+
   --shadow-custom-lg: 0 0 0 1px rgba(51, 51, 51, 0.04), 0 1px 1px 0.5px rgba(51, 51, 51, 0.04), 0 3px 3px -1.5px rgba(51, 51, 51, 0.02), 0 6px 6px -3px rgba(51, 51, 51, 0.04), 0 12px 12px -6px rgba(51, 51, 51, 0.04), 0 24px 24px -12px rgba(51, 51, 51, 0.04), 0 48px 48px -24px rgba(51, 51, 51, 0.04), 0 96px 96px -32px rgba(51, 51, 51, 0.06), inset 0 -1px 1px -0.5px rgba(51, 51, 51, 0.06);
-  
 
   /* AlignUI Block Shadow System */
-  
+
   --shadow-complex-12: 0 80px 80px -40px rgba(23, 23, 23, 0.04),
     0 48px 48px -24px rgba(23, 23, 23, 0.04);
-  
+
   --shadow-colored-gray: 0 20px 20px -10px rgba(23, 23, 23, 0.04),
     0 10px 10px -5px rgba(23, 23, 23, 0.04),
     0 6px 6px -3px rgba(23, 23, 23, 0.04),
     0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
     0 0 0 1px rgba(23, 23, 23, 0.04);
-  
+
   --shadow-complex: 0 20px 20px -10px rgba(23, 23, 23, 0.04),
     0 10px 10px -5px rgba(23, 23, 23, 0.04),
     0 6px 6px -3px rgba(23, 23, 23, 0.04),
@@ -488,34 +466,34 @@
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
     0 0 0 1px rgba(23, 23, 23, 0.08),
     0 -1px 1px -0.5px rgba(23, 23, 23, 0.06) inset;
-  
+
   --shadow-complex-2: 0 10px 10px -5px rgba(23, 23, 23, 0.02),
     0 6px 6px -3px rgba(23, 23, 23, 0.04),
     0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
     0 0 0 1px rgba(23, 23, 23, 0.02);
-  
+
   --shadow-complex-4: 0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
     0 0 0 1px rgba(23, 23, 23, 0.02);
-  
+
   --shadow-complex-5: 0 0 6px 0 rgba(255, 255, 255, 0.24) inset,
     0 40px 40px -20px rgba(23, 23, 23, 0.06),
     0 10px 10px -5px rgba(23, 23, 23, 0.06),
     0 6px 6px -3px rgba(23, 23, 23, 0.04),
     0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04);
-  
+
   --shadow-complex-6: 0 40px 40px -20px rgba(23, 23, 23, 0.06),
     0 10px 10px -5px rgba(23, 23, 23, 0.06),
     0 6px 6px -3px rgba(23, 23, 23, 0.04),
     0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
     0 0 6px 0 rgba(255, 255, 255, 0.24) inset;
-  
+
   --shadow-complex-7: 0 1px 2px 0 rgba(14, 18, 27, 0.24),
     0 0 0 1px #335cff;
-  
+
   --shadow-complex-8: 0 20px 20px -10px rgba(23, 23, 23, 0),
     0 10px 10px -5px rgba(23, 23, 23, 0),
     0 6px 6px -3px rgba(23, 23, 23, 0),
@@ -523,7 +501,7 @@
     0 1px 1px -0.5px rgba(23, 23, 23, 0),
     0 0 0 1px rgba(23, 23, 23, 0.08),
     0 -1px 1px -0.5px rgba(23, 23, 23, 0.06) inset;
-  
+
   --shadow-complex-9: 0 80px 40px -20px rgba(23, 23, 23, 0.06),
     0 40px 40px -20px rgba(23, 23, 23, 0.06),
     0 10px 10px -5px rgba(23, 23, 23, 0.06),
@@ -531,10 +509,10 @@
     0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
     0 0 6px 0 rgba(255, 255, 255, 0.04) inset;
-  
+
   --shadow-complex-10: 0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04);
-  
+
   --shadow-complex-11: 0 -1px 1px -0.5px rgba(23, 23, 23, 0.06) inset,
     0 20px 20px -10px rgba(23, 23, 23, 0.04),
     0 10px 10px -5px rgba(23, 23, 23, 0.04),
@@ -542,49 +520,47 @@
     0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
     0 0 0 1px rgba(23, 23, 23, 0.04);
-  
+
   --shadow-custom-input: 0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
     0 0 0 1px rgba(23, 23, 23, 0.08);
-  
+
   --shadow-custom-input-2: 0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
     0 0 0 1px var(--color-bg-soft-200);
-  
+
   --shadow-custom-input-3: 0 3px 3px -1.5px rgba(23, 23, 23, 0.06),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.06);
-  
+
   --shadow-custom-input-4: 0 3px 3px -1.5px rgba(23, 23, 23, 0.06),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.06),
     0 0 0 1px rgba(23, 23, 23, 0.02);
-  
+
   --shadow-custom-input-active: 0 6px 6px -3px rgba(23, 23, 23, 0.02),
     0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
     0 0 0 1.4px #335cff;
-  
+
   --shadow-gray-shadow: 0 0 0 1px rgba(23, 23, 23, 0.08);
-  
+
   --shadow-gray-shadow-4: 0 6px 6px -3px rgba(23, 23, 23, 0.04),
     0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
     0 0 0 1px rgba(23, 23, 23, 0.08),
     0 -1px 1px -0.5px rgba(23, 23, 23, 0.04) inset;
-  
 
   /* AlignUI Border Radius System - Dynamic from tokens.ts */
-  
+
   --radius-10: .625rem;
-  
+
   --radius-20: 1.25rem;
-  
 
   /* AlignUI Animation System - Dynamic from tokens.ts */
-  
+
   --animate-accordion-down: accordion-down 0.2s ease-out;
-  
+
   --animate-accordion-up: accordion-up 0.2s ease-out;
-  
+
 }
 
 /* Dark Mode Support - Tailwind v4.1 CSS Variables */
@@ -665,7 +641,7 @@
     --color-overlay-gray: oklch(32.11% 0.0000 0 / 56%);
     --color-overlay-slate: oklch(30.90% 0.0210 265.90 / 56%);
     --color-overlay: var(--color-overlay-slate);
-    
+
     --color-social-apple: oklch(100.00% 0.0000 0);
     --color-social-twitter: oklch(100.00% 0.0000 0);
     --color-social-github: oklch(100.00% 0.0000 0);
@@ -674,17 +650,16 @@
     --color-social-amazon: oklch(100.00% 0.0000 0);
     --color-social-zendesk: oklch(100.00% 0.0000 0);
 
-    
     --shadow-complex-12: 0 80px 80px -40px rgba(23, 23, 23, 0),
       0 48px 48px -24px rgba(23, 23, 23, 0);
-    
+
     --shadow-colored-gray: 0 20px 20px -10px rgba(23, 23, 23, 0),
       0 10px 10px -5px rgba(23, 23, 23, 0),
       0 6px 6px -3px rgba(23, 23, 23, 0),
       0 3px 3px -1.5px rgba(23, 23, 23, 0),
       0 1px 1px -0.5px rgba(23, 23, 23, 0),
       0 0 0 1px rgba(23, 23, 23, 0);
-    
+
     --shadow-complex: 0 20px 20px -10px rgba(23, 23, 23, 0),
       0 10px 10px -5px rgba(23, 23, 23, 0),
       0 6px 6px -3px rgba(23, 23, 23, 0),
@@ -692,34 +667,34 @@
       0 1px 1px -0.5px rgba(23, 23, 23, 0),
       0 0 0 1px #262626,
       0 -1px 1px -0.5px rgba(23, 23, 23, 0.04) inset;
-    
+
     --shadow-complex-2: 0 10px 10px -5px rgba(23, 23, 23, 0),
       0 6px 6px -3px rgba(23, 23, 23, 0),
       0 3px 3px -1.5px rgba(23, 23, 23, 0),
       0 1px 1px -0.5px rgba(23, 23, 23, 0),
       0 0 0 1px rgba(23, 23, 23, 0);
-    
+
     --shadow-complex-4: 0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
       0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
       0 0 0 1px rgba(23, 23, 23, 0.02);
-    
+
     --shadow-complex-5: 0 0 6px 0 rgba(255, 255, 255, 0.24) inset,
       0 40px 40px -20px rgba(23, 23, 23, 0.04),
       0 10px 10px -5px rgba(23, 23, 23, 0.04),
       0 6px 6px -3px rgba(23, 23, 23, 0),
       0 3px 3px -1.5px rgba(23, 23, 23, 0),
       0 1px 1px -0.5px rgba(23, 23, 23, 0);
-    
+
     --shadow-complex-6: 0 40px 40px -20px rgba(23, 23, 23, 0.04),
       0 10px 10px -5px rgba(23, 23, 23, 0.04),
       0 6px 6px -3px rgba(23, 23, 23, 0),
       0 3px 3px -1.5px rgba(23, 23, 23, 0),
       0 1px 1px -0.5px rgba(23, 23, 23, 0),
       0 0 6px 0 rgba(255, 255, 255, 0.24) inset;
-    
+
     --shadow-complex-7: 0 1px 2px 0 rgba(14, 18, 27, 0.24),
       0 0 0 1px #4d82ff;
-    
+
     --shadow-complex-8: 0 20px 20px -10px rgba(23, 23, 23, 0.04),
       0 10px 10px -5px rgba(23, 23, 23, 0.04),
       0 6px 6px -3px rgba(23, 23, 23, 0.04),
@@ -727,7 +702,7 @@
       0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
       0 0 0 1px rgba(23, 23, 23, 0.08),
       0 -1px 1px -0.5px rgba(23, 23, 23, 0.06) inset;
-    
+
     --shadow-complex-9: 0 80px 40px -20px rgba(23, 23, 23, 0.04),
       0 40px 40px -20px rgba(23, 23, 23, 0.04),
       0 10px 10px -5px rgba(23, 23, 23, 0.04),
@@ -735,10 +710,10 @@
       0 3px 3px -1.5px rgba(23, 23, 23, 0),
       0 1px 1px -0.5px rgba(23, 23, 23, 0),
       0 0 6px 0 rgba(255, 255, 255, 0.04) inset;
-    
+
     --shadow-complex-10: 0 3px 3px -1.5px rgba(23, 23, 23, 0),
       0 1px 1px -0.5px rgba(23, 23, 23, 0);
-    
+
     --shadow-complex-11: 0 -1px 1px -0.5px rgba(23, 23, 23, 0.04) inset,
       0 20px 20px -10px rgba(23, 23, 23, 0),
       0 10px 10px -5px rgba(23, 23, 23, 0),
@@ -746,35 +721,35 @@
       0 3px 3px -1.5px rgba(23, 23, 23, 0),
       0 1px 1px -0.5px rgba(23, 23, 23, 0),
       0 0 0 1px rgba(23, 23, 23, 0);
-    
+
     --shadow-custom-input: 0 3px 3px -1.5px rgba(23, 23, 23, 0),
       0 1px 1px -0.5px rgba(23, 23, 23, 0),
       0 0 0 1px #262626;
-    
+
     --shadow-custom-input-2: 0 3px 3px -1.5px rgba(23, 23, 23, 0),
       0 1px 1px -0.5px rgba(23, 23, 23, 0),
       0 0 0 1px #262626;
-    
+
     --shadow-custom-input-3: 0 3px 3px -1.5px rgba(23, 23, 23, 0.06),
       0 1px 1px -0.5px rgba(23, 23, 23, 0.06);
-    
+
     --shadow-custom-input-4: 0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
       0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
       0 0 0 1px rgba(23, 23, 23, 0);
-    
+
     --shadow-custom-input-active: 0 6px 6px -3px rgba(23, 23, 23, 0.02),
       0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
       0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
       0 0 0 1.4px #335cff;
-    
+
     --shadow-gray-shadow: 0 0 0 1px #262626;
-    
+
     --shadow-gray-shadow-4: 0 6px 6px -3px rgba(23, 23, 23, 0),
       0 3px 3px -1.5px rgba(23, 23, 23, 0),
       0 1px 1px -0.5px rgba(23, 23, 23, 0),
       0 0 0 1px #262626,
       0 -1px 1px -0.5px rgba(23, 23, 23, 0) inset;
-    
+
   }
 }
 
@@ -855,7 +830,7 @@
   --color-overlay-gray: oklch(32.11% 0.0000 0 / 56%);
   --color-overlay-slate: oklch(30.90% 0.0210 265.90 / 56%);
   --color-overlay: var(--color-overlay-slate);
-  
+
   --color-social-apple: oklch(100.00% 0.0000 0);
   --color-social-twitter: oklch(100.00% 0.0000 0);
   --color-social-github: oklch(100.00% 0.0000 0);
@@ -864,17 +839,16 @@
   --color-social-amazon: oklch(100.00% 0.0000 0);
   --color-social-zendesk: oklch(100.00% 0.0000 0);
 
-  
   --shadow-complex-12: 0 80px 80px -40px rgba(23, 23, 23, 0),
     0 48px 48px -24px rgba(23, 23, 23, 0);
-  
+
   --shadow-colored-gray: 0 20px 20px -10px rgba(23, 23, 23, 0),
     0 10px 10px -5px rgba(23, 23, 23, 0),
     0 6px 6px -3px rgba(23, 23, 23, 0),
     0 3px 3px -1.5px rgba(23, 23, 23, 0),
     0 1px 1px -0.5px rgba(23, 23, 23, 0),
     0 0 0 1px rgba(23, 23, 23, 0);
-  
+
   --shadow-complex: 0 20px 20px -10px rgba(23, 23, 23, 0),
     0 10px 10px -5px rgba(23, 23, 23, 0),
     0 6px 6px -3px rgba(23, 23, 23, 0),
@@ -882,34 +856,34 @@
     0 1px 1px -0.5px rgba(23, 23, 23, 0),
     0 0 0 1px #262626,
     0 -1px 1px -0.5px rgba(23, 23, 23, 0.04) inset;
-  
+
   --shadow-complex-2: 0 10px 10px -5px rgba(23, 23, 23, 0),
     0 6px 6px -3px rgba(23, 23, 23, 0),
     0 3px 3px -1.5px rgba(23, 23, 23, 0),
     0 1px 1px -0.5px rgba(23, 23, 23, 0),
     0 0 0 1px rgba(23, 23, 23, 0);
-  
+
   --shadow-complex-4: 0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
     0 0 0 1px rgba(23, 23, 23, 0.02);
-  
+
   --shadow-complex-5: 0 0 6px 0 rgba(255, 255, 255, 0.24) inset,
     0 40px 40px -20px rgba(23, 23, 23, 0.04),
     0 10px 10px -5px rgba(23, 23, 23, 0.04),
     0 6px 6px -3px rgba(23, 23, 23, 0),
     0 3px 3px -1.5px rgba(23, 23, 23, 0),
     0 1px 1px -0.5px rgba(23, 23, 23, 0);
-  
+
   --shadow-complex-6: 0 40px 40px -20px rgba(23, 23, 23, 0.04),
     0 10px 10px -5px rgba(23, 23, 23, 0.04),
     0 6px 6px -3px rgba(23, 23, 23, 0),
     0 3px 3px -1.5px rgba(23, 23, 23, 0),
     0 1px 1px -0.5px rgba(23, 23, 23, 0),
     0 0 6px 0 rgba(255, 255, 255, 0.24) inset;
-  
+
   --shadow-complex-7: 0 1px 2px 0 rgba(14, 18, 27, 0.24),
     0 0 0 1px #4d82ff;
-  
+
   --shadow-complex-8: 0 20px 20px -10px rgba(23, 23, 23, 0.04),
     0 10px 10px -5px rgba(23, 23, 23, 0.04),
     0 6px 6px -3px rgba(23, 23, 23, 0.04),
@@ -917,7 +891,7 @@
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
     0 0 0 1px rgba(23, 23, 23, 0.08),
     0 -1px 1px -0.5px rgba(23, 23, 23, 0.06) inset;
-  
+
   --shadow-complex-9: 0 80px 40px -20px rgba(23, 23, 23, 0.04),
     0 40px 40px -20px rgba(23, 23, 23, 0.04),
     0 10px 10px -5px rgba(23, 23, 23, 0.04),
@@ -925,10 +899,10 @@
     0 3px 3px -1.5px rgba(23, 23, 23, 0),
     0 1px 1px -0.5px rgba(23, 23, 23, 0),
     0 0 6px 0 rgba(255, 255, 255, 0.04) inset;
-  
+
   --shadow-complex-10: 0 3px 3px -1.5px rgba(23, 23, 23, 0),
     0 1px 1px -0.5px rgba(23, 23, 23, 0);
-  
+
   --shadow-complex-11: 0 -1px 1px -0.5px rgba(23, 23, 23, 0.04) inset,
     0 20px 20px -10px rgba(23, 23, 23, 0),
     0 10px 10px -5px rgba(23, 23, 23, 0),
@@ -936,35 +910,97 @@
     0 3px 3px -1.5px rgba(23, 23, 23, 0),
     0 1px 1px -0.5px rgba(23, 23, 23, 0),
     0 0 0 1px rgba(23, 23, 23, 0);
-  
+
   --shadow-custom-input: 0 3px 3px -1.5px rgba(23, 23, 23, 0),
     0 1px 1px -0.5px rgba(23, 23, 23, 0),
     0 0 0 1px #262626;
-  
+
   --shadow-custom-input-2: 0 3px 3px -1.5px rgba(23, 23, 23, 0),
     0 1px 1px -0.5px rgba(23, 23, 23, 0),
     0 0 0 1px #262626;
-  
+
   --shadow-custom-input-3: 0 3px 3px -1.5px rgba(23, 23, 23, 0.06),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.06);
-  
+
   --shadow-custom-input-4: 0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
     0 0 0 1px rgba(23, 23, 23, 0);
-  
+
   --shadow-custom-input-active: 0 6px 6px -3px rgba(23, 23, 23, 0.02),
     0 3px 3px -1.5px rgba(23, 23, 23, 0.04),
     0 1px 1px -0.5px rgba(23, 23, 23, 0.04),
     0 0 0 1.4px #335cff;
-  
+
   --shadow-gray-shadow: 0 0 0 1px #262626;
-  
+
   --shadow-gray-shadow-4: 0 6px 6px -3px rgba(23, 23, 23, 0),
     0 3px 3px -1.5px rgba(23, 23, 23, 0),
     0 1px 1px -0.5px rgba(23, 23, 23, 0),
     0 0 0 1px #262626,
     0 -1px 1px -0.5px rgba(23, 23, 23, 0) inset;
-  
+
+  --background: oklch(0.145 0 0);
+
+  --foreground: oklch(0.985 0 0);
+
+  --card: oklch(0.205 0 0);
+
+  --card-foreground: oklch(0.985 0 0);
+
+  --popover: oklch(0.205 0 0);
+
+  --popover-foreground: oklch(0.985 0 0);
+
+  --primary: oklch(0.922 0 0);
+
+  --primary-foreground: oklch(0.205 0 0);
+
+  --secondary: oklch(0.269 0 0);
+
+  --secondary-foreground: oklch(0.985 0 0);
+
+  --muted: oklch(0.269 0 0);
+
+  --muted-foreground: oklch(0.708 0 0);
+
+  --accent: oklch(0.269 0 0);
+
+  --accent-foreground: oklch(0.985 0 0);
+
+  --destructive: oklch(0.704 0.191 22.216);
+
+  --border: oklch(1 0 0 / 10%);
+
+  --input: oklch(1 0 0 / 15%);
+
+  --ring: oklch(0.556 0 0);
+
+  --chart-1: oklch(0.87 0 0);
+
+  --chart-2: oklch(0.556 0 0);
+
+  --chart-3: oklch(0.439 0 0);
+
+  --chart-4: oklch(0.371 0 0);
+
+  --chart-5: oklch(0.269 0 0);
+
+  --sidebar: oklch(0.205 0 0);
+
+  --sidebar-foreground: oklch(0.985 0 0);
+
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+
+  --sidebar-accent: oklch(0.269 0 0);
+
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+
+  --sidebar-border: oklch(1 0 0 / 10%);
+
+  --sidebar-ring: oklch(0.556 0 0);
+
 }
 
 /* Keyframe Animations - AlignUI System */
@@ -1035,4 +1071,46 @@ body {
   font-family: Inter, Arial, Helvetica, sans-serif;
   margin: 0;
   padding: 0;
+}
+
+/*
+ * shadcn/ui components (currently just src/components/ui/chart.tsx's
+ * tooltip/legend) read the generic --color-background/-foreground/-border/
+ * -muted* Tailwind utility names. Bridged to AlignUI's own semantic ramps
+ * instead of shadcn's default gray/black theme (docs/brand.md §5: no colors
+ * outside the AlignUI ramps) — light/dark variants come for free since the
+ * AlignUI tokens on the right already flip via the .dark class and
+ * prefers-color-scheme above. Only the tokens an actual component
+ * references are bridged; extend this list only when a new component needs
+ * one, not preemptively.
+ */
+@theme inline {
+  /* next/font's generated variable (src/app/layout.tsx), mapped to Tailwind's own font-sans utility key — docs/brand.md §3. */
+  --font-sans: var(--font-inter);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-border: var(--color-stroke-soft-200);
+  --color-muted-foreground: var(--color-text-sub-600);
+  --color-muted: var(--color-bg-weak-50);
+  --color-foreground: var(--color-text-strong-950);
+  --color-background: var(--color-bg-white-0);
+}
+
+/*
+ * shadcn/ui's `chart` component (Recharts wrapper) reads --chart-1..5 as its
+ * default series palette. Mapped to the categorical generation-source ramp
+ * from docs/brand.md §2 (AlignUI semantic ramps only, no raw hex) instead of
+ * shadcn's own generic gray/black theme, which docs/brand.md §5 forbids —
+ * see docs/tasks/TASK-live-dashboard.md §2.4 for why solar uses primary
+ * (orange) but thermal uses error (red) rather than warning (also orange).
+ */
+:root {
+  --chart-1: var(--color-information-base); /* hydro */
+  --chart-2: var(--color-primary-base); /* solar */
+  --chart-3: var(--color-stable-base); /* wind */
+  --chart-4: var(--color-error-base); /* thermal */
+  --chart-5: var(--color-feature-base); /* other / nuclear */
 }

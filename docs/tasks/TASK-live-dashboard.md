@@ -39,6 +39,20 @@ created or edited during the planning pass.
 
 ## 2. Planned changes
 
+**Progress note (2026-08-26):** §2.1–2.3 (contracts, continuous aggregate, live consumer) are
+done and test-covered against real TimescaleDB/Redpanda testcontainers. §2.4's AlignUI CLI step,
+shadcn `chart` component, and `zustand`/`@tanstack/react-query` install are done; the categorical
+palette resolved to hydro=information(blue)/solar=primary(orange)/wind=stable(teal)/
+thermal=error(red)/other=feature(purple) — **not** `warning`, since with Orange as the resolved
+primary, `--color-warning-base` *is* the same ramp as `--color-primary-base` (`docs/brand.md` §2).
+The state/provider architecture (`src/providers/query-provider.tsx`,
+`src/providers/live-store-provider.tsx` + `live-client-provider.tsx`, `src/stores/live-store.ts`,
+`src/lib/live-client.ts`, one `queryOptions` factory + abstracted hook per REST endpoint) is built
+and verified live in a real browser against the running stack: the live indicator reaches
+"Live" (green) and the Pipeline Health section (§2.5.3) renders real DLQ depth/consumer
+lag/last-poll data with the correct "Not observed" state for ENTSOE/EIA. Brazil deep-dive,
+country comparison, the map, and §2.6's documentation/verification closeout are not yet built.
+
 ### 2.1 Lock the API and live-message contracts first
 
 Extend `packages/contracts/src/api.ts` before implementing a route or UI that depends on it. The
@@ -184,6 +198,13 @@ Then use official component/design-system tooling:
   resolved token choices in `docs/brand.md`; no raw replacement hex values.]`
 - Use Inter through `next/font/google`, matching Flora. Inter exposes tabular figures via OpenType
   `tnum`; apply `font-variant-numeric: tabular-nums` only to live metrics/timestamps.
+- Install `@tanstack/react-query` and `zustand`. Server state (the four REST endpoints above)
+  goes through TanStack Query; client-only state several components read (WebSocket connection
+  status, heartbeat freshness, the live reading buffer) goes through a Zustand store. See
+  `CLAUDE.md`'s "Frontend state conventions" for the exact provider/hook shape — verified against
+  each library's own current Next.js App Router guide, not invented locally. No component calls
+  `useQuery`, the live-client Context, or a Zustand store hook directly; every access goes through
+  an abstracted hook in `src/hooks/`.
 
 ### 2.5 Build the dashboard from real API states
 

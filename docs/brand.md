@@ -32,39 +32,32 @@ radius systems. The only deliberate deviation is the **primary accent**.
 
 - **Flora's primary** is green (`--color-primary-* → var(--color-green-*)`) — land, growth,
   farming.
-- **Renewable Pulse's primary is amber** (`--color-primary-* → var(--color-yellow-*)`) —
-  electricity, energy, a live "pulse" rather than a growing field. Copy the exact override
-  pattern Flora's `globals.css` uses, substituting the ramp:
+- **Renewable Pulse's primary is amber-toned orange** (`--color-primary-* → var(--color-orange-*)`)
+  — electricity, energy, a live "pulse" rather than a growing field.
 
-  ```css
-  --color-primary-dark: var(--color-yellow-800);
-  --color-primary-darker: var(--color-yellow-700);
-  --color-primary-base: var(--color-yellow-600);
-  --color-primary-light: var(--color-yellow-100);
-  --color-primary-lighter: var(--color-yellow-50);
-  --color-primary-alpha-24: var(--color-yellow-alpha-24);
-  --color-primary-alpha-16: var(--color-yellow-alpha-16);
-  --color-primary-alpha-10: var(--color-yellow-alpha-10);
-  ```
-
-  And the dark-mode primary reassignment Flora's `@media (prefers-color-scheme: dark)` block
-  does for green, mirrored for yellow (`--color-primary-light: var(--color-yellow-alpha-16)`,
-  `--color-primary-lighter: var(--color-yellow-alpha-10)`).
-
-  `[VERIFY: run AlignUI's own CLI (`npx @alignui/cli tailwind`) during implementation and pick
-  its closest built-in accent name to this amber/yellow ramp, the way Flora's CLAUDE.md records
-  picking "Slate" over "Gray" — don't hand-edit tokens the CLI would have generated correctly.]`
+  **Resolved 2026-08-26, confirmed by reading `@alignui/cli@0.0.19`'s own bundled source
+  directly** (`dist/index.js`'s primary-color prompt): the CLI's real option list is exactly
+  **Blue, Purple, Orange, Green** — no Yellow/Sky, matching what `TASK-live-dashboard.md` §2.4
+  already recorded and superseding this section's original yellow-ramp plan. **Orange** was run
+  as `primaryColor` directly (not applied as a post-hoc override), so `apps/web/src/app/globals.css`
+  already defines `--color-primary-* → var(--color-orange-*)` for both light and dark mode —
+  there is no separate override block to hand-write, unlike Flora's green swap. Full answers:
+  primary **Orange** · neutral **Slate** · format **oklch** · prefix *(blank)* · tailwind.config
+  **No — CSS-only** · global CSS `apps/web/src/app/globals.css`.
 
 - **Energy-source categorical palette** (for stacked bars / donut charts breaking generation
   down by source) reuses AlignUI's existing semantic-adjacent ramps rather than inventing new
   hex values, per Flora's own invariant ("no raw hex outside `globals.css`, `charts/config.ts`,
   `map/config.ts`"):
   - Hydro → **blue** (`--color-information-*` ramp / water)
-  - Solar → **yellow/amber** (`--color-primary-*` — same ramp as the brand accent, since solar
+  - Solar → **orange/amber** (`--color-primary-*` — same ramp as the brand accent, since solar
     is the most visually "energy"-coded source)
-  - Wind → **sky/teal** (`--color-verified-*` or `--color-stable-*`)
-  - Thermal/fossil → **orange/red** (`--color-warning-*` / `--color-error-*` — deliberately the
-    "attention" end of the semantic palette, since this is the non-renewable share)
+  - Wind → **teal** (`--color-stable-*`)
+  - Thermal/fossil → **red** (`--color-error-*` — deliberately the "attention" end of the
+    semantic palette, since this is the non-renewable share). **Not `--color-warning-*`**: with
+    Orange as the resolved primary accent (§2), AlignUI's `--color-warning-base` *is* the same
+    orange ramp as `--color-primary-base`, so pairing solar (primary) with warning (thermal)
+    would make the two least-distinguishable — `error` (red) stays visually distinct from both.
   - Other/nuclear → **purple** (`--color-feature-*`)
 
   `[VERIFY against the dataviz skill's palette-and-contrast validator before shipping real
@@ -72,7 +65,7 @@ radius systems. The only deliberate deviation is the **primary accent**.
   colorblind-safety at the swatch sizes the actual charts will use.]`
 
 - Renewable-share itself (the single most important number on the dashboard) uses a
-  **sequential** ramp from neutral to primary-amber, *not* a red→green diverging scale — this
+  **sequential** ramp from neutral to primary-orange, *not* a red→green diverging scale — this
   isn't a good/bad judgment, it's a proportion, and treating a 30% grid as "bad" (red) misreads
   countries that are making real progress.
 
