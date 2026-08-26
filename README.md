@@ -11,15 +11,16 @@ upstream sources are polled, not pushed.
 
 ## Status
 
-**Ingestion, reliability, and the dashboard's API layer are built and running against real
-data. The dashboard's frontend is not built yet.**
+**Ingestion, reliability, the API layer, and the live dashboard are all built and deployed,
+running against real data on Railway.**
 
 | Phase | State |
 |---|---|
 | 1 — ONS spine (Go → Redpanda → TimescaleDB → API) | ✅ Live-verified: 366,336 real plant/hour readings ingested, zero duplicates on replay |
 | 2 — Reliability (DLQ, backpressure, pipeline health) | ✅ Live-verified |
 | 3 — ENTSO-E (Norway) + EIA (USA) pollers | ✅ EIA live-verified. ENTSO-E implemented and unit-tested; live verification pending an API token |
-| 4 — Live dashboard | 🚧 API layer implemented (`generation-mix`/`-latest`/`-share`, plant registry, WebSocket fan-out); integration tests, `apps/web` UI, and doc closeout still open — see `docs/tasks/TASK-live-dashboard.md` |
+| 4 — Live dashboard | ✅ Live-verified — Brazil/USA deep-dives, plant maps, generation-mix charts, pipeline-health panel, live WebSocket indicator |
+| 5 — Railway deployment | ✅ Live-verified — see Deployment below (`docs/tasks/TASK-railway-deploy.md`) |
 
 Nothing here is faked to look more finished than it is: if a source has no verified data, the
 dashboard is expected to show it as missing rather than substitute a placeholder.
@@ -75,7 +76,7 @@ apps/
   ingest/     Go — scheduled pollers, normalize, publish to Redpanda
   consumer/   TS — "persist" consumer group, TimescaleDB migrations
   api/        TS — REST + WebSocket, "live" consumer group
-  web/        Next.js — dashboard (scaffolded; UI not yet built)
+  web/        Next.js — dashboard
 packages/
   contracts/  Zod schemas + inferred types (single source of truth on the TS side)
   config/     shared tsconfig, eslint, prettier
@@ -119,6 +120,17 @@ pnpm dlq -- replay
 
 `docker exec renewable-pulse-timescaledb psql -U renewable_pulse -d renewable_pulse -c "SELECT count(*) FROM readings;"`
 and Redpanda Console at `http://localhost:8080` are useful for watching the pipeline directly.
+
+## Deployment
+
+Live on Railway (project `renewable-pulse`): **[renewable-pulse.up.railway.app](https://renewable-pulse.up.railway.app)**
+(dashboard), API at `api-production-31f3.up.railway.app`. Six services — `ingest`, `consumer`,
+`api`, `web`, plus self-hosted `redpanda` and `timescaledb` (Railway has no managed Postgres
+variant with the Timescale extension) — each built from this repo's own per-service
+Dockerfiles via `.railway/railway.ts` (Railway's config-as-code) + `railway up`. No GitHub App
+connection required. Full topology, the platform-specific gotchas hit along the way (registry
+reachability, non-root volume permissions, Docker build-context paths), and verification steps
+are in `docs/tasks/TASK-railway-deploy.md`.
 
 ## Docs
 
