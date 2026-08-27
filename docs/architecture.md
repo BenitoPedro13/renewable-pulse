@@ -1,7 +1,10 @@
 # Architecture — Renewable Pulse
 
-> Status: **spec only, nothing built yet.** This document is the design of record for the
-> implementation session that follows `docs/tasks/TASK-implementation-plan.md`.
+> Status: **built and live.** Phases 1–4 are implemented per `docs/tasks/TASK-implementation-plan.md`
+> and `docs/tasks/TASK-live-dashboard.md`; this document reflects the as-built system, not just the
+> original design. ENTSO-E (Norway) remains code-complete but pending live API-token verification
+> (`docs/tasks/TASK-entsoe-eia-pollers.md` §5.1) — the dashboard shows it as "no verified readings
+> yet" rather than faking a Norway series.
 
 ## 1. Problem statement and scope
 
@@ -180,7 +183,8 @@ source than Landsnet itself, which is transmission-only.]`
 ```
 ┌─────────────────────────────────────────────┐
 │ apps/ingest (Go)                             │
-│  - one poller per source (ONS / ENTSO-E/EIA) │
+│  - one poller per source (ONS/ENTSO-E/EIA,   │
+│    incl. EIA's US48 + 7 RTO respondents)     │
 │  - normalizes to the canonical event schema  │
 │  - publishes to Redpanda topic "readings"    │
 └───────────────────────┬───────────────────────┘
@@ -194,18 +198,28 @@ source than Landsnet itself, which is transmission-only.]`
                         │
         ┌───────────────┴───────────────┐
         ▼                                ▼
-┌───────────────────┐          ┌────────────────────────┐
-│ apps/consumer       │          │ apps/consumer            │
-│ group: "persist"    │          │ group: "live"             │
-│ idempotent upsert    │          │ WebSocket fan-out to      │
-│ → TimescaleDB         │          │ apps/api's live clients    │
-└───────────────────┘          └────────────────────────┘
+┌───────────────────┐          ┌────────────────────────────┐
+│ apps/consumer       │          │ apps/api (Fastify)          │
+│ group: "persist"    │          │ group: "live" (in-process,   │
+│ idempotent upsert    │          │ apps/api/src/live/consumer.ts)│
+│ → TimescaleDB         │          │ → LiveHub → WebSocket clients │
+└───────────────────┘          └────────────────────────────┘
         │ on validation/unknown-asset failure
         ▼
 ┌───────────────────┐
 │ readings.dlq        │
 └───────────────────┘
 ```
+
+**As built (§2.3 of `docs/tasks/TASK-live-dashboard.md`, resolving §10's open question below):**
+the `live` consumer group runs **inside the `apps/api` process** (`apps/api/src/live/consumer.ts`
++ `hub.ts`), not as a separate deployable — this is the only process that owns the connected
+WebSocket clients, so co-locating avoids introducing Redis or a private consumer→API socket just
+to cross a process boundary. `persist` remains the independent long-running `apps/consumer`
+process. V1 runs exactly one API+`live` replica: a Kafka consumer group divides partitions among
+its members, so a second replica in the same `live` group would see only part of the stream and
+its locally connected browsers would miss readings — horizontal API scaling is out of scope until
+an external fan-out layer or one all-partitions subscription per replica is added.
 
 - **Canonical event schema** (defined once in `packages/contracts`, mirrored by hand in Go —
   see §6 on the cross-language seam): `{ source, zone, asset_id | null, metric, value, unit,
@@ -221,6 +235,54 @@ source than Landsnet itself, which is transmission-only.]`
 - **Backpressure**: pollers publish in bounded batches with a channel/queue depth limit in Go;
   if Redpanda or a consumer is behind, the poller blocks rather than unboundedly buffering in
   memory. Consumer groups can scale horizontally (Redpanda partition count sets the ceiling).
+
+### 4.1 API surface (as built)
+
+`apps/api` (Fastify) exposes, all backed by real TimescaleDB rows or live pass-through proxies
+(never generated data):
+
+- `GET /readings?since&limit` — raw canonical events (Phase 1).
+- `GET /pipeline-health` — DLQ depth, `persist`/`live` consumer lag, last-poll-per-source.
+- `GET /generation-mix` — hourly/daily sums from the `generation_hourly` continuous aggregate
+  (§4.2), `source` widened from the original `"ONS"`-only plan to the full `sourceSchema`
+  (`docs/tasks/TASK-live-dashboard.md` §2.7) so Brazil/USA full generation-type composition can be
+  compared, each source's units summed independently and never combined across sources.
+- `GET /generation-latest` — latest real reading per `(source, zone, asset_id, metric)`; `source`
+  likewise widened to the full enum (§2.9) so the regional-totals panel can query EIA's US zones.
+- `GET /generation-share` — the dimensionless "hydro + wind + solar share of observed generation"
+  ratio per source/day, source-scoped, never a cross-source claim of one absolute number.
+- `GET /generation-top-assets` — ONS-only per-plant leaderboard (ranks `readings.asset_id` by
+  average output for one metric/window), queried directly against the raw `readings` hypertable
+  since only ONS readings carry plant-level granularity; EIA/ENTSO-E are respondent/zone-level only.
+- `GET /plants?source=ANEEL_SIGA|EIA_860` — plant-registry geography and capacity, not live output.
+  `ANEEL_SIGA` (default) is Brazil's official SIGA CKAN resource, deduped by CEG (that resource
+  repeats the same CEG across rows). `EIA_860` is EIA Form 860/860M's
+  `electricity/operating-generator-capacity` route, grouped from generator-level to plant-level by
+  `plantid`, capped at the first 5000 of ~4.3M generator-months (a real sample, not full US
+  coverage — the response's `attribution` field says so). Both branches cache successful responses
+  for one hour and return `unavailable: true` rather than a fabricated coordinate file when the
+  upstream can't be reached.
+- `GET /live` (WebSocket) — `{ type: "reading", reading }` / `{ type: "heartbeat", sentAt }` Zod
+  discriminated-union frames. An API-startup cutoff (Kafka record timestamp, not `ingested_at`)
+  prevents an existing `live` group's committed backlog from replaying into freshly connected
+  browsers; a slow/non-reading client is closed with WebSocket code `1013` once
+  `ws.bufferedAmount` exceeds 1 MiB, so a stalled browser cannot block Kafka consumption for the
+  rest of the connected clients.
+
+CORS/WebSocket-upgrade origin checks share one allowlist (`apps/api/src/origin.ts`,
+`ALLOWED_ORIGINS`) registered via `@fastify/cors` and `@fastify/websocket`'s `verifyClient` — no
+permissive `*` origin on the credential-capable `/live` upgrade. A missing `Origin` header (curl,
+server-to-server) is always allowed; browser requests must match the allowlist exactly.
+
+### 4.2 Continuous aggregate
+
+`apps/consumer/migrations/0002_generation_hourly.sql` adds an hourly TimescaleDB continuous
+aggregate over `readings`, grouped by `time_bucket('1 hour', recorded_at), source, zone, metric,
+unit` and storing `SUM(value)`/`COUNT(*)`. Chart endpoints query it directly for hourly output and
+roll it up in SQL for daily. No `time_bucket_gapfill`, interpolation, or generated calendar series
+— a missing upstream hour stays absent rather than looking observed. Refresh policy:
+`start_offset => INTERVAL '35 days'`, `end_offset => INTERVAL '1 hour'`,
+`schedule_interval => INTERVAL '1 hour'`.
 
 ## 5. Reliability patterns to build and document
 
@@ -288,10 +350,12 @@ identity) so the two projects read as a connected pair without being visually id
 ```
 renewable-pulse/
   apps/
-    ingest/       Go — scheduled pollers (ONS/ENTSO-E/EIA), normalize, publish to Redpanda
-    consumer/     TS/Node — "persist" and "live" consumer groups off the same topic
-    api/          TS — REST for historical queries + WebSocket for the live feed
-    web/          Next.js — Brazil deep-dive + country-comparison dashboard
+    ingest/       Go — scheduled pollers (ONS/ENTSO-E/EIA incl. 7 EIA RTOs), normalize, publish
+    consumer/     TS/Node — "persist" consumer group + TimescaleDB migrations (0001, 0002)
+    api/          TS — REST (§4.1) + WebSocket; owns the in-process "live" consumer group
+    web/          Next.js — dashboard: Brazil deep-dive, USA section, country comparison,
+                  plant map (Brazil/USA toggle), plant/capacity leaderboards, volatility chart,
+                  cross-chart metric filter, pipeline-health panel, live indicator
   packages/
     contracts/    Zod schemas for the canonical event + API DTOs
     config/       shared tsconfig/eslint/prettier
@@ -313,10 +377,11 @@ renewable-pulse/
   alongside plain HTTP routes) covers both without Nest's DI/module ceremony, which buys nothing
   for a single small service in this monorepo — `apps/api` doesn't need Nest's
   controller/provider layering to stay organized at this scope.
-- Whether `apps/consumer`'s two consumer groups ship as one process with two consumer instances,
-  or two separate deployable processes — a Railway service-count/cost tradeoff to decide during
-  implementation, not here. Still open; Phase 1 only needs the "persist" group, so this is a
-  Phase 4 decision.
+- ~~Whether `apps/consumer`'s two consumer groups ship as one process with two consumer instances,
+  or two separate deployable processes~~ — **resolved in `docs/tasks/TASK-live-dashboard.md` §2.3
+  (2026-08-26):** `persist` stays its own long-running `apps/consumer` process; `live` runs
+  in-process inside `apps/api` (§4.1) since that's the process holding the WebSocket clients, and
+  V1 is pinned to exactly one API+`live` replica (see §4 above).
 - ~~ENTSO-E/EIA request/response shapes (§3)~~ — resolved in
   `docs/tasks/TASK-entsoe-eia-pollers.md` (2026-08-26): see §3 for the full detail. **Still open:**
   a live verification pass against real captured responses, pending the user obtaining an

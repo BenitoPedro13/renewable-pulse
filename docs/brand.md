@@ -1,7 +1,9 @@
 # Brand & Visual Identity — Renewable Pulse
 
-> Status: spec only. Written before any UI exists, so the implementation session has a
-> single source of truth for tone, palette, and typography instead of improvising per screen.
+> Status: **built.** Originally written before any UI existed; sections below now record the
+> resolved choices (AlignUI Orange primary, categorical chart palette, tabular numerals, actual
+> map/leaderboard scope) alongside the original spec, so this stays the single source of truth
+> rather than drifting out of sync with `apps/web`.
 
 ## 1. Identity and tone
 
@@ -60,9 +62,20 @@ radius systems. The only deliberate deviation is the **primary accent**.
     would make the two least-distinguishable — `error` (red) stays visually distinct from both.
   - Other/nuclear → **purple** (`--color-feature-*`)
 
-  `[VERIFY against the dataviz skill's palette-and-contrast validator before shipping real
-  charts — this mapping is a starting proposal, not yet checked for pairwise contrast or
-  colorblind-safety at the swatch sizes the actual charts will use.]`
+  **Resolved (2026-08-26):** the five tokens actually wired into `apps/web/src/app/globals.css`'s
+  `--chart-1..5` (feeding shadcn's `chart.tsx`) are `--color-information-base` (blue,
+  `oklch(55.50% 0.2449 266.68)`), `--color-primary-base` (orange, `oklch(70.64% 0.1872 47.14)`),
+  `--color-stable-base` (teal, `oklch(77.94% 0.1360 180.35)`), `--color-error-base` (red,
+  `oklch(64.71% 0.2288 22.47)`), `--color-feature-base` (purple, `oklch(57.72% 0.2287 289.43)`).
+  Hues are spread 267°/47°/180°/22°/289° around the wheel — well separated except thermal (red,
+  22°) and solar (orange, 47°), which sit only 25° apart at similar lightness (65% vs 71%) and are
+  the pair most likely to be hard to tell apart under protanopia/deuteranopia (the red–green axis).
+  Mitigation already in place rather than a repaint: every chart using this palette
+  (`generation-mix-chart.tsx`, `regional-mix-chart.tsx`, `diurnal-pattern-chart.tsx`) renders
+  shadcn's `ChartLegendContent`, which pairs each swatch with its metric's text label, and
+  `ChartTooltipContent` does the same — color is a secondary cue, not the only one, satisfying
+  `CLAUDE.md`'s "color never the sole carrier of meaning" rule. No raw hex was introduced; all five
+  values are existing AlignUI semantic tokens.
 
 - Renewable-share itself (the single most important number on the dashboard) uses a
   **sequential** ramp from neutral to primary-orange, *not* a red→green diverging scale — this
@@ -77,17 +90,31 @@ Identical to Flora's AlignUI type scale (`--text-title-h1` … `--text-subheadin
 timestamp, DLQ depth) so they don't visually jitter as digit widths change tick to tick — use a
 `tabular-nums` font-variant-numeric on those specific values, not a different typeface.
 
-`[VERIFY: confirm Flora's base font (likely a variable font loaded via next/font) exposes
-tabular figures; if not, pick a fallback that does rather than introducing a second family.]`
+**Resolved (2026-08-26):** `apps/web/src/app/layout.tsx` loads Inter via `next/font/google`,
+matching Flora; Inter exposes tabular figures through OpenType `tnum`, so no second family was
+needed. `.tabular-nums` is applied selectively (not globally) across every live-updating value
+built so far: pipeline-health DLQ/lag/timestamps, the hydro+wind+solar share percentages, the live
+indicator's timestamp, chart tooltips, and both plant leaderboards' rank/value columns.
 
 ## 4. Dashboard visual language
 
-- **Brazil deep-dive view**: a subsystem/plant map (mirrors Flora's Mapbox GL usage —
-  `react-map-gl`, `mapbox-gl-draw`/`turf` if any geometry math is needed) plus a stacked-area
-  chart of generation mix over time, using the categorical palette from §2.
-- **Country-comparison view**: small-multiple or grouped-bar comparison of Brazil vs.
-  Norway/Iceland vs. USA renewable share — resist the urge to build a single busy chart; three
-  clean small multiples read faster than one overloaded one.
+- **Brazil deep-dive / USA sections**: each has its own hydro+wind+solar share number,
+  stacked-area generation-mix chart, regional-mix chart (ONS's 5 subsystems / EIA's 7 RTOs),
+  diurnal-pattern chart, and volatility chart — all using the categorical palette from §2.
+- **Plant map** (`react-map-gl`, mirroring Flora's Mapbox GL usage): one map, one Brazil/USA
+  source toggle (`PlantMapSection`) driving both the map and an adjacent per-zone totals panel in
+  lockstep — Brazil renders ANEEL SIGA registry markers (color-coded by fuel, sized by installed
+  capacity), USA renders EIA Form 860/860M plant-level markers grouped from generator rows. Both
+  are plant *registry* geography/capacity, never implied as live per-plant output.
+- **Plant leaderboards**: `PlantLeaderboard` (Brazil-only, ONS per-plant live-output ranking by
+  fuel type — the one place plant-level granularity exists) and `PlantCapacityLeaderboard` (USA,
+  EIA-860 registered-capacity ranking, explicitly labeled "registered capacity, not live output" so
+  it's never read as directly comparable to Brazil's live-output ranking).
+- **Country-comparison view**: small multiples for Brazil/Norway/USA hydro+wind+solar share, not
+  one combined chart — resist the urge to build a single busy chart. Norway shows "no verified
+  readings yet" rather than sample data until ENTSO-E's live token lands.
+- **Cross-chart metric filter**: one `MetricFilterControl` toggles series visibility across every
+  chart at once, client-side, without refetching.
 - **Pipeline health panel**: per §"Reliability patterns" in `docs/architecture.md` — DLQ depth,
   consumer lag, last-successful-poll-per-source, shown plainly (numbers + a status dot), not
   hidden in an admin-only page. Showing the pipeline's own health *is* the case study.

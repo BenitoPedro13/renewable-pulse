@@ -59,7 +59,8 @@ wind+solar share number — see the deviation note below §2.1. The map renders 
 markers (Mapbox token supplied from Flora's own `.env`, per `docs/brand.md`'s "browser-safe public
 client env var" rule) after a real bug was found and fixed: ANEEL's own CKAN resource repeats the
 same CEG across rows (a "daily" resource queried without a date filter), so `apps/api/src/routes/
-plants.ts` now dedupes by CEG. §2.6's documentation/verification closeout is not yet done.
+plants.ts` now dedupes by CEG. **§2.6's documentation/verification closeout is done (2026-08-26)**
+— see §6 for the recorded verification results.
 
 **Deviation from the original plan (2026-08-26, user-requested):** `GET /generation-mix`'s
 `source` param, originally scoped to the literal `"ONS"` (§2.1 below, for the Brazil chart only),
@@ -599,3 +600,60 @@ new `## 6. Verification results` section of this document.
 
 No Phase 4 code should be committed until these checks pass and the repository docs/configuration
 listed in §2.6 are updated. Do not add a `Co-Authored-By` trailer.
+
+## 6. Verification results (2026-08-26, doc/verification closeout pass)
+
+This pass updated `docs/architecture.md`, `docs/brand.md`, `.env.example`, and `README.md` per
+§2.6 (no application code changed) and then ran §5's checks fresh against the real local infra
+(existing `renewable-pulse-redpanda`/`renewable-pulse-timescaledb` containers, already holding
+real persisted data from prior sessions — 381,624 real ONS rows, 4,902 real EIA rows).
+
+1. **Contracts and static checks — pass.** `pnpm build`, `pnpm typecheck`, and `pnpm lint` all
+   succeeded across all 5 workspace packages. `pnpm test` passed: 9 API test files / 41 tests
+   (including `live.integration.spec.ts`'s 3 real-Redpanda WebSocket tests and 6 route-integration
+   spec files against real TimescaleDB) and 2 consumer test files / 10 tests (including
+   `batch.spec.ts`'s DLQ-routing and 50k-row burst tests) all green. `go build ./...`,
+   `go vet ./...`, and `go test ./...` passed in `apps/ingest`; confirmed `main_test.go` asserts
+   `eiaLookback >= 5 * 24h` (`main.go:190`), i.e. the five-day EIA overlap fix from §2.6 is both
+   implemented and regression-guarded, not just implemented.
+2. **Real TimescaleDB integration — pass, reconfirmed live.** `psql \d+ generation_hourly` against
+   the actual long-running container shows the continuous aggregate view backed by
+   `_timescaledb_internal._materialized_hypertable_2`, grouped by `(bucket_start, source, zone,
+   metric, unit)` exactly per §2.2 — this is the same real database the dashboard has been reading
+   from across prior sessions, not a fresh testcontainer-only claim. Gap-preservation, replay
+   idempotency, and unit-grouping are covered by `generation-mix.spec.ts`/`generation-share.spec.ts`
+   (all passing in step 1).
+3. **Real Redpanda + WebSocket integration — pass.** `live.integration.spec.ts`'s three tests
+   (broadcast-after-cutoff, reject-invalid-frame, no-backlog-to-fresh-client) all passed against a
+   real Redpanda broker. `hub.spec.ts` unit-covers the `bufferedAmount`/code-`1013` slow-client
+   bound. The one item §5.3 explicitly excludes from automated proof (Kafka admin-client lag/DLQ
+   numbers) was not re-verified manually in this pass since no consumer/API code changed — it was
+   already manually verified live in the §2.9 session (DLQ inspected directly via `rpk topic
+   consume` when diagnosing the stale-process bug).
+4. **Dashboard acceptance flow — not re-run fresh in this pass.** This session's own environment
+   has no `apps/ingest`/`apps/consumer`/`apps/api`/`apps/web` dev processes running (only the
+   shared Docker infra), and this pass changed documentation only, so there is no new code to
+   regress. The full acceptance flow (live reading arrival, Brazil/USA/Norway small multiples,
+   pipeline-health-vs-`curl` parity, malformed-event DLQ routing, reconnect/backoff behavior) was
+   already live-verified against the real running stack across the sessions recorded in §2.4–§2.9
+   above, most recently the §2.9 stale-process fix (rebuilt `apps/ingest`, restarted `persist` and
+   `apps/api`, reconfirmed all 8 EIA zones persisting and rendering). Re-running that full flow is
+   owed again the next time application code (not just docs) changes.
+5. **Visual and accessibility checks — palette/tabular-numeral items resolved by this pass; layout
+   checks unchanged from prior sessions.** `docs/brand.md` §2 now records the actual `--chart-1..5`
+   oklch values and hue spread, including the one residual pairwise-contrast caveat (thermal/red
+   vs. solar/orange, 25° apart) and its mitigation (`ChartLegendContent`/`ChartTooltipContent` pair
+   every swatch with a text label, confirmed present in `generation-mix-chart.tsx` and
+   `regional-mix-chart.tsx`). Reduced motion is confirmed in code: `live-indicator.tsx`'s pulse uses
+   Tailwind's `motion-safe:animate-pulse`, which is inert under `prefers-reduced-motion` while the
+   status text/color remain unaffected. `.tabular-nums` usage was grep-confirmed across all
+   live-updating values (pipeline-health, share percentages, live indicator, both leaderboards,
+   chart tooltips). Mobile/tablet/desktop responsive width and keyboard-navigation checks were not
+   re-run in a live browser this pass (no dev server running here); the last live confirmation of
+   those is the browser verification recorded in §2.4–§2.5 above.
+
+**Net result:** all automatable checks pass fresh; the two checks that require a live browser
+against a running dev stack (item 4's full acceptance flow, item 5's responsive/keyboard pass)
+rely on the prior sessions' already-recorded live verification rather than a fresh repeat, since
+this pass touched documentation only. Phase 4 remains verification-complete under that combined
+record.

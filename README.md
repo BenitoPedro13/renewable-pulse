@@ -19,7 +19,7 @@ running against real data on Railway.**
 | 1 — ONS spine (Go → Redpanda → TimescaleDB → API) | ✅ Live-verified: 366,336 real plant/hour readings ingested, zero duplicates on replay |
 | 2 — Reliability (DLQ, backpressure, pipeline health) | ✅ Live-verified |
 | 3 — ENTSO-E (Norway) + EIA (USA) pollers | ✅ EIA live-verified. ENTSO-E implemented and unit-tested; live verification pending an API token |
-| 4 — Live dashboard | ✅ Live-verified — Brazil/USA deep-dives, plant maps, generation-mix charts, pipeline-health panel, live WebSocket indicator |
+| 4 — Live dashboard | ✅ Live-verified — Brazil/USA deep-dives, a Brazil/USA plant-map toggle (ANEEL SIGA + EIA-860), per-plant and per-capacity leaderboards, USA regional (7-RTO) generation mix, volatility charts, a cross-chart metric filter, pipeline-health panel, live WebSocket indicator |
 | 5 — Railway deployment | ✅ Live-verified — see Deployment below (`docs/tasks/TASK-railway-deploy.md`) |
 
 Nothing here is faked to look more finished than it is: if a source has no verified data, the
@@ -39,10 +39,11 @@ IoT/device-ingestion problem Flora's own architecture has identified and deferre
   plant/subsystem, reservoir levels, interchange, load, marginal cost.
 - **[ENTSO-E Transparency Platform](https://transparency.entsoe.eu)** — EU grids including
   Norway: generation by fuel type, load, cross-border flows.
-- **[EIA Open Data API](https://www.eia.gov/opendata)** — USA: generation by fuel type, by
-  balancing authority and state.
+- **[EIA Open Data API](https://www.eia.gov/opendata)** — USA: hourly generation by fuel type for
+  the US48 national aggregate plus 7 individual RTOs/ISOs (CAISO, ERCOT, ISO-NE, MISO, NYISO, PJM,
+  SPP); Form 860/860M plant-level registered capacity for the USA plant map/leaderboard.
 - **[ANEEL SIGA](https://dados.gov.br)** — Brazil's official plant registry (CEG, coordinates,
-  fuel/phase), used for the plant map's geography, not for live output.
+  fuel/phase, capacity), used for the plant map's geography, not for live output.
 
 See `docs/architecture.md` §3 for access details and any open `[VERIFY]` items.
 
@@ -110,8 +111,8 @@ cd apps/api && pnpm dev
 curl "http://localhost:3001/readings?limit=10"
 curl "http://localhost:3001/pipeline-health"
 
-# 6. in another shell: run the dashboard (currently the default Next.js scaffold)
-cd apps/web && pnpm dev
+# 6. in another shell: run the dashboard
+cd apps/web && pnpm dev   # localhost:3000
 
 # 7. inspect or replay anything that landed in the DLQ
 cd ../consumer && pnpm dlq -- list
