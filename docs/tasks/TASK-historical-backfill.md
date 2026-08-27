@@ -325,22 +325,47 @@ this one.
 
 **Where backfill runs:** Redpanda has no public listener — `.railway/railway.ts:38-39` advertises
 only `redpanda.railway.internal:9092`. A backfill process must run inside Railway's private
-network via `railway ssh --service ingest -- ...`, not from a local machine pointed at a public
-broker address. **Resolved (web research, 2026-08-27):** `railway ssh --service <name> -- <command
-and args>` runs a one-off, non-interactive command against that service — PTY allocation is
-auto-detected off when stdin/stdout are piped, so output stays script-clean, matching what a
-long-running backfill process needs. Concrete pattern for the ENTSO-E pilot run (§2.3):
+network, not from a local machine pointed at a public broker address.
 
-```
-railway ssh --service ingest -- ./ingest \
-  --backfill=entsoe \
-  --backfill-from=2015-01-05 \
-  --backfill-to=2026-07-01
-```
+**`railway ssh --service ingest -- ...` does NOT work — confirmed live, 2026-08-27, not just
+verified-on-paper.** `railway ssh --service ingest -- echo ok` fails with "your container does not
+have a shell (bash or sh)": `apps/ingest/Dockerfile:14` deploys on
+`gcr.io/distroless/static-debian12:nonroot`, a real shell-less image (chosen deliberately for a
+smaller attack surface, per the Dockerfile's own CGO_ENABLED=0/static-binary comment), and
+Railway's SSH exec mechanism requires a shell in the target container regardless of what command
+is passed. This invalidates this section's original plan and the general "`railway ssh` CLI
+syntax works" finding from earlier research — that finding was correct about the CLI's own syntax,
+just never checked against this specific distroless image, which is the part that actually
+matters here.
 
-`docs/tasks/TASK-railway-deploy.md §5.1` already documents multiple Railway CLI surprises found
-only by trying them live — treat this pattern as verified-on-paper, not verified-in-production,
-until it's actually run once against the real `ingest` service.
+**Revised plan: skip `railway ssh` entirely — run backfill as its own one-off Railway deployment
+instead.** A normal Railway deployment execs the container's `ENTRYPOINT` directly
+(`apps/ingest/Dockerfile:16`'s `ENTRYPOINT ["/ingest"]`) — that path never needs a shell, only
+`ssh`'s interactive/exec-into-a-running-container path does. So the backfill doesn't need shell
+access at all; it needs a deployment whose process *is* the backfill run:
+
+1. Add a second Railway service in `.railway/railway.ts` — e.g. `ingest-backfill` — built from the
+   same `apps/ingest/Dockerfile` and reusing `ingest`'s private-network env vars
+   (`REDPANDA_BROKERS`, `ENTSOE_API_TOKEN`, `EIA_API_KEY`), but with its own start command that
+   appends the `--backfill*` flags, e.g. a Railway service `startCommand` override of
+   `/ingest --backfill=entsoe --backfill-from=2015-01-05 --backfill-to=2026-07-01`. Being a
+   distinct service means it can be deployed, watched, and torn down without touching the
+   always-on live-polling `ingest` service at all.
+2. Deploy it (`railway up --service ingest-backfill` or via `railway.ts`'s existing config-as-code
+   flow), then watch progress with `railway logs --service ingest-backfill` — the same per-chunk
+   `log.Printf` lines this task's driver already emits are exactly what this is for.
+3. The process exits cleanly (`runBackfill` returns nil) when the range is done; Railway will show
+   the deployment as stopped/crashed depending on how it interprets a clean exit(0) from a
+   non-restarting service — cosmetic, not a correctness issue, but confirm this live before
+   relying on Railway's own status display to mean "done."
+4. Delete or pause the `ingest-backfill` service between runs (per provider, or per resume) rather
+   than leaving it deployed — it's a one-off job, not a fourth persistent service.
+
+This is a **new, not-yet-attempted mechanism** — the concrete Railway CLI/`railway.ts` commands
+for step 1 (service creation, start-command override, env var reuse from an existing service)
+still need to be worked out live, the same way `docs/tasks/TASK-railway-deploy.md §5.1` had to
+work out this project's other Railway surprises by trying them. Do not assume the exact
+`railway.ts` syntax above is correct until it's actually deployed once.
 
 **Volume/backpressure:** the `redpanda-volume` is provisioned at 5000MB
 (`.railway/railway.ts:12`) — a real capacity constraint if a backfill produces messages faster
@@ -423,9 +448,11 @@ in §2.2/§2.4/§2.6 above for what was found and how it changed the plan):
   bad news**: a known, still-open limitation. This changed §2.6's plan from "ship a migration with
   a safety-buffer `compress_after`" to "don't auto-apply the policy until backfill is done," not
   just a note-taking exercise.
-- `railway ssh`'s CLI semantics — **resolved**: `railway ssh --service <name> -- <command> <args>`
-  runs a one-off, non-interactive command against that service (PTY is auto-detected off when
-  piped, keeping output script-clean). Confirms the pattern in §2.7's runbook note.
+- `railway ssh`'s CLI semantics — **checked live, and it changed the plan**: the syntax itself
+  works, but `railway ssh --service ingest -- ...` cannot run anything against this specific
+  service — its container has no shell (`apps/ingest/Dockerfile:14`'s distroless nonroot base).
+  §2.7 now documents a `railway ssh`-free replacement (a dedicated one-off deployment whose start
+  command *is* the backfill invocation) instead.
 
 Still open, deliberately left as operator/runtime verification rather than something resolvable by
 further static research:
