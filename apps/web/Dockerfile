@@ -40,8 +40,12 @@ ENV NODE_ENV=production
 
 # Next's standalone output traces the minimal server + node_modules subset
 # but deliberately excludes public/ and .next/static — copied in separately
-# per Next.js's own standalone-output docs.
+# per Next.js's own standalone-output docs. src/app/fonts/*.ttf is the same
+# case: opengraph-image.tsx reads those files via fs.readFile at request
+# time (not a static import), so Next's file tracer never detects them as a
+# server dependency and standalone output silently omits them too.
 COPY --from=installer /app/apps/web/public ./apps/web/public
+COPY --from=installer /app/apps/web/src/app/fonts ./apps/web/src/app/fonts
 COPY --from=installer /app/apps/web/.next/standalone ./
 COPY --from=installer /app/apps/web/.next/static ./apps/web/.next/static
 

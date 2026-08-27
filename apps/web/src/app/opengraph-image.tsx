@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { ImageResponse } from "next/og";
 
 export const size = { width: 1200, height: 630 };
@@ -20,21 +23,30 @@ const colors = {
 };
 
 // next/og needs raw font bytes (Satori doesn't read next/font's CSS
-// variables) — fetched once at build time from Google's CDN, the same
-// documented pattern Vercel's own og-examples repo uses. Requesting with
-// an old-browser User-Agent gets a .ttf back instead of .woff2, which
-// Satori parses directly.
-async function loadInter(weight: 400 | 700) {
-  const css = await fetch(`https://fonts.googleapis.com/css2?family=Inter:wght@${weight}`, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/534.34 (KHTML, like Gecko) PhantomJS/1.9.7 Safari/534.34",
-    },
-  }).then((res) => res.text());
+// variables). Originally fetched at *request* time from Google's CDN — a
+// real bug: that runtime network call (not a build-time one, despite the
+// old comment here) hung/failed in Railway's container network, 502ing
+// this route. Fixed by vendoring the real Inter TTFs (same files Google
+// Fonts itself serves, SIL OFL licensed) into ./fonts/.
+//
+// Two resolution attempts tried and rejected before this one, both
+// build-verified rather than assumed: `new URL(..., import.meta.url)` +
+// `fetch()` (Vercel's own documented pattern) throws "fetch failed: not
+// implemented... yet" — this Next/Node version's fetch doesn't support
+// `file:` URLs. A plain `path.join(process.cwd(), "src/app/fonts", ...)`
+// (Vercel's fs.readFile-based alternative) breaks across this repo's two
+// run contexts: local dev's cwd is apps/web, but the Railway Docker image
+// runs `node apps/web/server.js` from WORKDIR /app (the monorepo root, per
+// this repo's existing standalone-output Dockerfile), so cwd there is /app.
+// Checking both real candidate locations, rather than picking one, is what
+// actually works in both places.
+function fontsDir(): string {
+  const monorepoRelative = path.join(process.cwd(), "apps", "web", "src", "app", "fonts");
+  return existsSync(monorepoRelative) ? monorepoRelative : path.join(process.cwd(), "src", "app", "fonts");
+}
 
-  const fontUrl = css.match(/src: url\(([^)]+)\) format\('truetype'\)/)?.[1];
-  if (!fontUrl) throw new Error("opengraph-image: could not resolve Inter font URL");
-  return fetch(fontUrl).then((res) => res.arrayBuffer());
+async function loadInter(weight: 400 | 700): Promise<Buffer> {
+  return readFile(path.join(fontsDir(), `Inter-${weight}.ttf`));
 }
 
 // The four generation-source colors from docs/brand.md §2's categorical
