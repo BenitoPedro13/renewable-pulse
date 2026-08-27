@@ -6,6 +6,7 @@ import { BrazilSection } from "@/components/dashboard/brazil-section";
 import { CountryComparisonSection } from "@/components/dashboard/country-comparison-section";
 import { ALL_METRICS, MetricFilterControl } from "@/components/dashboard/metric-filter-control";
 import { PipelineHealthSection } from "@/components/dashboard/pipeline-health-section";
+import { PipelineTransparencySection } from "@/components/dashboard/pipeline-transparency-section";
 import { PlantMapSection } from "@/components/dashboard/plant-map-section";
 import { UsaSection } from "@/components/dashboard/usa-section";
 
@@ -31,6 +32,7 @@ export function DashboardShell() {
       <PlantMapSection />
       <CountryComparisonSection visibleMetrics={visibleMetrics} />
       <PipelineHealthSection />
+      <PipelineTransparencySection />
     </div>
   );
 }

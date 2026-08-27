@@ -262,6 +262,14 @@ an external fan-out layer or one all-partitions subscription per replica is adde
   coverage — the response's `attribution` field says so). Both branches cache successful responses
   for one hour and return `unavailable: true` rather than a fabricated coordinate file when the
   upstream can't be reached.
+- `GET /pipeline-health/dlq?limit=` — a real-time, read-only preview of `readings.dlq` (up to
+  `limit`, max 100), for the dashboard's pipeline-transparency panel
+  (`docs/tasks/TASK-pipeline-transparency-panel.md`). Reuses the same throwaway-consumer-group peek
+  pattern `apps/consumer/src/dlq-cli.ts`'s `list` command already used; replay stays a CLI-only
+  action so this browser-reachable route can never trigger a mutating re-publish.
+- `GET /ingestion-throughput?from=&to=` — real hourly persisted-reading counts per source, summed
+  from the existing `generation_hourly` continuous aggregate's `reading_count` column (no new
+  migration). Volume, not value — `zone`/`metric`/`unit` are dropped from the grouping on purpose.
 - `GET /live` (WebSocket) — `{ type: "reading", reading }` / `{ type: "heartbeat", sentAt }` Zod
   discriminated-union frames. An API-startup cutoff (Kafka record timestamp, not `ingested_at`)
   prevents an existing `live` group's committed backlog from replaying into freshly connected

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  dlqPreviewQuerySchema,
   generationMixQuerySchema,
   generationShareRowSchema,
+  ingestionThroughputQuerySchema,
   liveFrameSchema,
   pipelineHealthResponseSchema,
   readingsQuerySchema,
@@ -96,6 +98,19 @@ describe("live dashboard API schemas", () => {
       totalValue: 10,
       unit: "MWmed",
       observedIntervals: 1,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("defaults dlqPreview limit to 20 and rejects a limit over 100", () => {
+    expect(dlqPreviewQuerySchema.parse({}).limit).toBe(20);
+    expect(dlqPreviewQuerySchema.safeParse({ limit: "500" }).success).toBe(false);
+  });
+
+  it("rejects an ingestion-throughput range wider than the documented maximum", () => {
+    const result = ingestionThroughputQuerySchema.safeParse({
+      from: "2026-01-01T00:00:00Z",
+      to: "2026-03-01T00:00:00Z",
     });
     expect(result.success).toBe(false);
   });

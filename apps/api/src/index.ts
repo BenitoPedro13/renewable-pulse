@@ -9,8 +9,10 @@ import { generationLatestRoute } from "./routes/generation-latest.js";
 import { generationMixRoute } from "./routes/generation-mix.js";
 import { generationShareRoute } from "./routes/generation-share.js";
 import { generationTopAssetsRoute } from "./routes/generation-top-assets.js";
+import { ingestionThroughputRoute } from "./routes/ingestion-throughput.js";
 import { liveRoute } from "./routes/live.js";
 import { pipelineHealthRoute } from "./routes/pipeline-health.js";
+import { pipelineHealthDlqRoute } from "./routes/pipeline-health-dlq.js";
 import { plantsRoute } from "./routes/plants.js";
 import { readingsRoute } from "./routes/readings.js";
 import { isOriginAllowed, parseAllowedOrigins } from "./origin.js";
@@ -42,10 +44,12 @@ app.addHook("onSend", async (request, reply, payload) => {
 
 await app.register(readingsRoute);
 await app.register(pipelineHealthRoute);
+await app.register(pipelineHealthDlqRoute);
 await app.register(generationMixRoute);
 await app.register(generationLatestRoute);
 await app.register(generationShareRoute);
 await app.register(generationTopAssetsRoute);
+await app.register(ingestionThroughputRoute);
 await app.register(plantsRoute);
 await app.register(async (instance) => liveRoute(instance, hub));
 

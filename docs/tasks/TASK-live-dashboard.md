@@ -367,10 +367,16 @@ endpoint needed) are wired into both `BrazilSection` and `UsaSection`.
 
 **Explicitly deferred (bigger, separate scope — not started this session):** ONS
 reservoir-level (EAR) and marginal-cost (CMO) ingestion; ENTSO-E load/cross-border-flow document
-types (blocked on the same missing API token as the rest of ENTSO-E); a pipeline-transparency
-panel (data provenance, ingestion throughput, DLQ viewer). Each is real, additive, and intended
-for a following session — recorded here so the next session (or continuation) doesn't have to
-re-derive the plan or re-verify anything from scratch.
+types (blocked on the same missing API token as the rest of ENTSO-E). Each is real, additive, and
+intended for a following session — recorded here so the next session (or continuation) doesn't
+have to re-derive the plan or re-verify anything from scratch.
+
+**Built (2026-08-26/27):** the pipeline-transparency panel (data provenance, ingestion throughput,
+DLQ viewer) — see `docs/tasks/TASK-pipeline-transparency-panel.md` for the full plan/verification.
+Live-checking it against a real running dev stack surfaced a genuine live instance of the exact
+stale-`tsx-watch`-process bug diagnosed in §2.9 below (a peer session's `apps/consumer` predated
+the RTO zone additions and was DLQ-routing real EIA RTO readings again) — direct evidence the panel
+does what it's for.
 
 ### 2.8 USA regional ingestion (2026-08-26, user-approved priority #1 from §2.7's deferred list)
 
@@ -642,9 +648,11 @@ real persisted data from prior sessions — 381,624 real ONS rows, 4,902 real EI
 5. **Visual and accessibility checks — palette/tabular-numeral items resolved by this pass; layout
    checks unchanged from prior sessions.** `docs/brand.md` §2 now records the actual `--chart-1..5`
    oklch values and hue spread, including the one residual pairwise-contrast caveat (thermal/red
-   vs. solar/orange, 25° apart) and its mitigation (`ChartLegendContent`/`ChartTooltipContent` pair
-   every swatch with a text label, confirmed present in `generation-mix-chart.tsx` and
-   `regional-mix-chart.tsx`). Reduced motion is confirmed in code: `live-indicator.tsx`'s pulse uses
+   vs. solar/orange, 25° apart). **Correction:** this pass originally claimed `ChartLegendContent`
+   mitigated that caveat; re-checked and corrected same-day — no chart currently renders a
+   persistent legend, only `ChartTooltipContent` (hover/focus text label). `docs/brand.md` §2 now
+   records the accurate state and flags adding a real legend as a separate follow-up, not silently
+   left as a false "resolved" claim. Reduced motion is confirmed in code: `live-indicator.tsx`'s pulse uses
    Tailwind's `motion-safe:animate-pulse`, which is inert under `prefers-reduced-motion` while the
    status text/color remain unaffected. `.tabular-nums` usage was grep-confirmed across all
    live-updating values (pipeline-health, share percentages, live indicator, both leaderboards,

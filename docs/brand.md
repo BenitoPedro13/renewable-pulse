@@ -70,12 +70,18 @@ radius systems. The only deliberate deviation is the **primary accent**.
   Hues are spread 267°/47°/180°/22°/289° around the wheel — well separated except thermal (red,
   22°) and solar (orange, 47°), which sit only 25° apart at similar lightness (65% vs 71%) and are
   the pair most likely to be hard to tell apart under protanopia/deuteranopia (the red–green axis).
-  Mitigation already in place rather than a repaint: every chart using this palette
-  (`generation-mix-chart.tsx`, `regional-mix-chart.tsx`, `diurnal-pattern-chart.tsx`) renders
-  shadcn's `ChartLegendContent`, which pairs each swatch with its metric's text label, and
-  `ChartTooltipContent` does the same — color is a secondary cue, not the only one, satisfying
-  `CLAUDE.md`'s "color never the sole carrier of meaning" rule. No raw hex was introduced; all five
-  values are existing AlignUI semantic tokens.
+  Partial mitigation already in place, not yet complete: every chart using this palette renders
+  shadcn's `ChartTooltipContent`, which pairs each swatch with its metric's text label on hover/
+  focus (confirmed in `components/ui/chart.tsx`'s tooltip renderer) — color is not the *only* way
+  to identify a series. **Correction (2026-08-26): no chart currently renders a persistent
+  `ChartLegendContent`** (grep-confirmed absent from every `dashboard/*.tsx` chart file) — a
+  static view of the chart (no hover/focus) shows color alone for series identity, which does not
+  fully satisfy `CLAUDE.md`'s "color never the sole carrier of meaning" rule on its own. `[VERIFY:
+  add a persistent `ChartLegend`/`ChartLegendContent` to `generation-mix-chart.tsx`,
+  `regional-mix-chart.tsx`, `composition-comparison-chart.tsx`, `diurnal-pattern-chart.tsx` — a
+  real, separate follow-up, not done as part of the pipeline-transparency panel
+  (`docs/tasks/TASK-pipeline-transparency-panel.md`).]` No raw hex was introduced; all five
+  palette values are existing AlignUI semantic tokens.
 
 - Renewable-share itself (the single most important number on the dashboard) uses a
   **sequential** ramp from neutral to primary-orange, *not* a red→green diverging scale — this

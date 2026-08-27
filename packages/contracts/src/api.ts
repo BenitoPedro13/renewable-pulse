@@ -168,6 +168,51 @@ export const plantsResponseSchema = z.object({
 });
 export type PlantsResponse = z.infer<typeof plantsResponseSchema>;
 
+/**
+ * GET /pipeline-health/dlq query params — a real-time peek at readings.dlq
+ * for the dashboard's pipeline-transparency panel
+ * (docs/tasks/TASK-pipeline-transparency-panel.md §2.1). Read-only: replay
+ * stays a CLI-only action (apps/consumer's dlq-cli.ts) so a browser-reachable
+ * route can never trigger a mutating re-publish.
+ */
+export const dlqPreviewQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+});
+export type DlqPreviewQuery = z.infer<typeof dlqPreviewQuerySchema>;
+
+export const dlqPreviewEntrySchema = z.object({
+  partition: z.number().int().min(0),
+  offset: z.string(),
+  raw: z.unknown(),
+  error: z.string(),
+  sourceTopic: z.string(),
+  failedAt: z.iso.datetime({ offset: true }),
+});
+export const dlqPreviewResponseSchema = z.object({ entries: z.array(dlqPreviewEntrySchema) });
+export type DlqPreviewResponse = z.infer<typeof dlqPreviewResponseSchema>;
+
+/**
+ * GET /ingestion-throughput query params — real hourly persisted-reading
+ * counts per source, derived from the existing generation_hourly continuous
+ * aggregate's own reading_count column (no new migration). zone/metric/unit
+ * are deliberately dropped from the grouping: this is a volume question, not
+ * a value question, so summing counts across them never risks the
+ * unit-mixing problem value-summing would.
+ */
+export const ingestionThroughputQuerySchema = dateRangeSchema.refine(
+  maxRange(MAX_HOURLY_DAYS),
+  `range must be <= ${MAX_HOURLY_DAYS} days`,
+);
+export type IngestionThroughputQuery = z.infer<typeof ingestionThroughputQuerySchema>;
+
+export const ingestionThroughputRowSchema = z.object({
+  bucketStart: z.iso.datetime({ offset: true }),
+  source: sourceSchema,
+  readingCount: z.number().int().min(1),
+});
+export const ingestionThroughputResponseSchema = z.object({ rows: z.array(ingestionThroughputRowSchema) });
+export type IngestionThroughputResponse = z.infer<typeof ingestionThroughputResponseSchema>;
+
 export const liveFrameSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("reading"), reading: readingEventSchema }),
   z.object({ type: z.literal("heartbeat"), sentAt: z.iso.datetime({ offset: true }) }),
