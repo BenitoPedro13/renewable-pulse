@@ -133,6 +133,11 @@ connection required. Full topology, the platform-specific gotchas hit along the 
 reachability, non-root volume permissions, Docker build-context paths), and verification steps
 are in `docs/tasks/TASK-railway-deploy.md`.
 
+`apps/web` is **also** mirrored on Vercel — **[renewable-pulse.vercel.app](https://renewable-pulse.vercel.app)**
+— for its edge network, auto-deploying on every push to `main`. `apps/api`'s data routes send
+long `Cache-Control` headers (§7 of the task doc) since every reading is identical for every
+visitor and the upstream sources only refresh hourly.
+
 ## Docs
 
 - `docs/architecture.md` — system design: data sources, event pipeline, reliability patterns,

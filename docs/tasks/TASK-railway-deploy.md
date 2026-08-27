@@ -224,6 +224,12 @@ debugging time:
    "CALL refresh_continuous_aggregate('generation_hourly', NULL, NULL);"`. `apps/consumer`'s own
    migration already schedules the policy correctly going forward — this was a one-time bootstrap
    need, not a recurring one.
+9. **`apps/web/next.config.ts`'s `output: "standalone"` (needed for the Railway Docker image,
+   §2.3) breaks a build on Vercel** — `ENOENT: ... open '/vercel/path0/apps/web/.next/
+   next-server.js.nft.json'`. Vercel's own builder produces its own deployment package and
+   doesn't expect standalone-mode trace files. Fixed by making it conditional on `process.env.VERCEL`
+   (which Vercel sets automatically in its build environment): `output: process.env.VERCEL ?
+   undefined : "standalone"`. Relevant once `apps/web` was also deployed to Vercel — see §7.
 
 ## 6. CI/CD (`.github/workflows/ci.yml`)
 
@@ -245,3 +251,37 @@ Once set, every push to `main` that passes `ts`/`go` redeploys `ingest`/`consume
 verified-working — see §5.1 item 5 for why `ingest` alone uses `--path-as-root`). `redpanda` and
 `timescaledb` aren't part of this pipeline — they're stable infra, not app code, and image-based
 services don't need a CI-triggered rebuild.
+
+## 7. Caching and the Vercel mirror of `apps/web`
+
+**Decided 2026-08-27, with the user:** `apps/api`'s read-only data routes
+(`generation-mix`/`-latest`/`-share`/`-top-assets`, `plants`, `readings`) send
+`Cache-Control: public, max-age=300, stale-while-revalidate=1800` (`apps/api/src/cache-control.ts`)
+— safe because every reading is identical for every visitor and the upstream sources only refresh
+on the order of an hour (`docs/architecture.md` §2). `/pipeline-health` and `/live` are
+deliberately excluded — health must reflect current state, not a cached snapshot.
+
+That alone only helps *repeat* visits from the *same* browser. To get a shared edge cache — a
+different visitor getting a prior visitor's cached response, globally, without hitting Railway —
+`apps/web` is **also** deployed to Vercel (`renewable-pulse.vercel.app`, project linked to
+`BenitoPedro13/renewable-pulse`, root directory `apps/web`, auto-deploys on every push to `main`
+via Vercel's own GitHub integration — no extra CI step needed for this one). This is additive,
+not a replacement: `apps/web` still runs on Railway too (`renewable-pulse.up.railway.app`) via the
+existing Docker/CI pipeline above. Both currently serve the same client-side-fetching build, so
+Vercel's benefit today is its edge network for the static shell/assets — `apps/web/next.config.ts`
+needed a one-line fix for this (§5.1 item 9).
+
+**Still open, not yet built:** actually caching the *data* at Vercel's edge (so a second, different
+visitor gets an instant response, not just a second visit from the same browser) needs the
+dashboard's initial data fetch moved from client-side TanStack Query to a server-side fetch with
+Next's own cache (`fetch(..., { next: { revalidate: 300 } })` in a Server Component, then hydrating
+TanStack Query for the live layer) — a real architecture change, not just a hosting change,
+deliberately deferred pending the user's go-ahead. `NEXT_PUBLIC_API_BASE_URL` and
+`NEXT_PUBLIC_MAPBOX_TOKEN` are set as Vercel project env vars (Config type, not Secret — both are
+`NEXT_PUBLIC_*` values already inlined into the client bundle, so nothing is actually hidden by
+marking them Secret) via the dashboard (no Vercel MCP tool exposes env-var writes; the CLI would
+need its own separate `vercel login`, so the dashboard was faster than either).
+
+Also open: whether to keep running `apps/web` on **both** Railway and Vercel long-term (cost is
+low either way on usage-based billing, but it's a real duplication) — not decided, flagged here
+rather than resolved unilaterally.
