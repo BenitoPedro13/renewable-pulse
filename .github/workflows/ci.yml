@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ts:
+    name: TS workspace (lint / typecheck / test / build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned to the exact version used elsewhere in this repo's tooling
+      # (Dockerfiles, local dev) — not auto-detected from package.json's
+      # devEngines/packageManager field, since that range (^11.21.0) hits a
+      # real bug in some patch versions when resolved through Corepack; see
+      # docs/tasks/TASK-railway-deploy.md §5.1.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.24.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Integration tests hit real Redpanda/TimescaleDB via testcontainers
+      # (CLAUDE.md's "real infra, never mock the broker or database" rule)
+      # — ubuntu-latest ships Docker preinstalled, so this needs no extra
+      # setup.
+      - run: pnpm turbo run lint typecheck test build
+
+  go:
+    name: apps/ingest (build / test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/ingest/go.mod
+
+      - working-directory: apps/ingest
+        run: |
+          go build ./...
+          go test ./...
+
+  deploy:
+    name: Deploy to Railway
+    needs: [ts, go]
+    # Only main pushes deploy — PRs and other branches just run the checks
+    # above. Skips cleanly (rather than failing) when RAILWAY_TOKEN isn't
+    # configured yet, so this workflow is safe to merge before the secret
+    # exists.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip if RAILWAY_TOKEN isn't configured
+        id: gate
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "RAILWAY_TOKEN secret not set — skipping deploy. See docs/tasks/TASK-railway-deploy.md §6 to add it." >&2
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Railway CLI
+        if: steps.gate.outputs.skip == 'false'
+        run: npm install -g @railway/cli@5.44.1
+
+      # ingest is deployed with apps/ingest itself as the upload root, not
+      # the repo root — its Dockerfile's COPY paths are written relative to
+      # apps/ingest (docs/tasks/TASK-railway-deploy.md §5.1 item 5).
+      - name: Deploy ingest
+        if: steps.gate.outputs.skip == 'false'
+        run: railway up ./apps/ingest --path-as-root --service ingest --ci
+
+      # consumer/api/web keep the repo-root build context — turbo prune
+      # needs the whole workspace visible.
+      - name: Deploy consumer
+        if: steps.gate.outputs.skip == 'false'
+        run: railway up --service consumer --ci
+
+      - name: Deploy api
+        if: steps.gate.outputs.skip == 'false'
+        run: railway up --service api --ci
+
+      - name: Deploy web
+        if: steps.gate.outputs.skip == 'false'
+        run: railway up --service web --ci
