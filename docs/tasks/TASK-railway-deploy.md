@@ -212,3 +212,24 @@ debugging time:
    confirmed working. `railway volume add --service <name>` also panicked
    (`Option::unwrap()` on `None`); worked around by `railway service link <name>` first, then
    `railway volume add --mount-path <path>` without the `--service` flag.
+
+## 6. CI/CD (`.github/workflows/ci.yml`)
+
+One manual step remains before the `deploy` job actually deploys anything — it's deliberately
+designed to skip (not fail) until this is done, so merging the workflow itself is safe:
+
+1. **Create a project-scoped Railway token.** Railway's GraphQL `projectTokenCreate` mutation
+   (which the CLI's own `railway api` can call) returned `Not Authorized` when tried from this
+   session, and minting an account-wide API token was blocked by this environment's own
+   permission classifier as a sensitive credential action — both correctly require a human, not
+   an agent, to do this. In the Railway dashboard: **project `renewable-pulse` → environment
+   `production` → Settings → Tokens → New Token**, scoped to this project + the `production`
+   environment.
+2. **Add it as a GitHub Actions secret**: repo `BenitoPedro13/renewable-pulse` → Settings →
+   Secrets and variables → Actions → New repository secret, name `RAILWAY_TOKEN`.
+
+Once set, every push to `main` that passes `ts`/`go` redeploys `ingest`/`consumer`/`api`/`web` via
+`railway up --ci` (the same command this task's manual deploy used, so it's already
+verified-working — see §5.1 item 5 for why `ingest` alone uses `--path-as-root`). `redpanda` and
+`timescaledb` aren't part of this pipeline — they're stable infra, not app code, and image-based
+services don't need a CI-triggered rebuild.
