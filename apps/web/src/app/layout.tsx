@@ -12,12 +12,15 @@ const inter = Inter({
   subsets: ["latin"],
 });
 
-// The real, currently-deployed production URL (docs/tasks/TASK-railway-deploy.md)
-// — required for Next to resolve absolute URLs for the OG image / icons.
-// Update if a custom domain replaces it.
-const siteUrl = "https://renewable-pulse.up.railway.app";
+// The real, currently-deployed production URL (docs/tasks/TASK-railway-deploy.md
+// §7 — apps/web moved off Railway to Vercel-only 2026-08-27) — required for
+// Next to resolve absolute URLs for the OG image / icons. Update if a custom
+// domain replaces it.
+const siteUrl = "https://renewable-pulse.vercel.app";
+// Kept under ~160 characters — Google truncates meta descriptions around
+// there, and the same string doubles as the OG/X description.
 const description =
-  "A live instrument panel for how much of the world's electricity already comes from renewables — Brazil's hydro-heavy grid, compared against Norway and the USA. Every reading traces back to a real ONS, ENTSO-E, or EIA API response.";
+  "A live instrument panel for how much of the world's electricity comes from renewables — Brazil, Norway, and the USA, tracked from real ONS/ENTSO-E/EIA data.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

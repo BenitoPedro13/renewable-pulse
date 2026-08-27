@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const siteUrl = "https://renewable-pulse.up.railway.app";
+const siteUrl = "https://renewable-pulse.vercel.app";
 
 // Single-page dashboard today — add an entry here if apps/web ever grows
 // additional routes.
