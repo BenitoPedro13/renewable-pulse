@@ -212,6 +212,18 @@ debugging time:
    confirmed working. `railway volume add --service <name>` also panicked
    (`Option::unwrap()` on `None`); worked around by `railway service link <name>` first, then
    `railway volume add --mount-path <path>` without the `--service` flag.
+8. **`generation_hourly` (the TimescaleDB continuous aggregate `apps/api`'s `/generation-share`
+   and the Brazil/USA deep-dive share numbers read from) is created `WITH NO DATA` and only
+   refreshes on its own hourly `add_continuous_aggregate_policy` schedule** — on a brand-new
+   database this means the dashboard's deep-dive sections show "No verified readings yet" for up
+   to an hour even though real rows already exist in the raw `readings` table (confirmed via
+   `/generation-latest`, which reads `readings` directly and had data immediately). Not a bug,
+   just a cold-start gap specific to a fresh deploy — local dev never sees this because the same
+   database has had the aggregate running continuously for a long time. Fixed once, manually:
+   `railway ssh --service timescaledb -- psql -U renewable_pulse -d renewable_pulse -c
+   "CALL refresh_continuous_aggregate('generation_hourly', NULL, NULL);"`. `apps/consumer`'s own
+   migration already schedules the policy correctly going forward — this was a one-time bootstrap
+   need, not a recurring one.
 
 ## 6. CI/CD (`.github/workflows/ci.yml`)
 
