@@ -1,9 +1,9 @@
 "use client";
 
 import type { GenerationShareResponse, Metric, Source } from "@renewable-pulse/contracts";
-import { useState } from "react";
 import { CompositionComparisonChart } from "@/components/dashboard/composition-comparison-chart";
 import { GENERATION_SHARE_LABEL, useGenerationShare } from "@/hooks/use-generation-share";
+import { useFixedDateRange } from "@/hooks/use-fixed-date-range";
 
 // GET /generation-share is scoped per source, not per zone, so this panel
 // is genuinely "Europe" once ENTSO-E is live: Norway's five bidding zones
@@ -15,16 +15,6 @@ const COUNTRIES: { source: Source; country: string; grid: string }[] = [
   { source: "ENTSOE", country: "Europe (Norway + Netherlands)", grid: "ENTSO-E" },
   { source: "EIA", country: "USA", grid: "EIA" },
 ];
-
-/** Last 30 days is enough to find the most recent real daily share per source without an unbounded query; fixed once per mount so the query key (and cache) stays stable across re-renders. */
-function useDateRange(days: number) {
-  const [range] = useState(() => {
-    const to = new Date();
-    const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
-    return { from: from.toISOString(), to: to.toISOString() };
-  });
-  return range;
-}
 
 function latestRowFor(rows: GenerationShareResponse["rows"], source: Source) {
   return rows
@@ -64,7 +54,7 @@ function CountryCard({ country, grid, row }: { country: string; grid: string; ro
  * (docs/tasks/TASK-live-dashboard.md §2.5.2).
  */
 export function CountryComparisonSection({ visibleMetrics }: { visibleMetrics: Metric[] }) {
-  const { from, to } = useDateRange(30);
+  const { from, to } = useFixedDateRange(30);
   const { data, isPending, isError, error } = useGenerationShare({ sources: ["ONS", "ENTSOE", "EIA"], from, to });
 
   if (isPending) {

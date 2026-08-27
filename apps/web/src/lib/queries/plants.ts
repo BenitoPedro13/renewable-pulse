@@ -10,7 +10,7 @@ export const plantsCache = {
   options: (source: PlantRegistrySource) =>
     queryOptions({
       queryKey: plantsCache.key(source),
-      queryFn: async (): Promise<PlantsResponse> => plantsResponseSchema.parse(await apiFetch(`/plants?source=${source}`)),
+      queryFn: async (): Promise<PlantsResponse> => plantsResponseSchema.parse(await apiFetch(`/plants?source=${source}`, REFETCH_INTERVAL_MS / 1000)),
       refetchInterval: REFETCH_INTERVAL_MS,
       staleTime: REFETCH_INTERVAL_MS,
     }),

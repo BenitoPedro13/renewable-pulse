@@ -24,7 +24,7 @@ export const generationTopAssetsCache = {
           to: params.to,
           limit: String(params.limit ?? 10),
         });
-        return generationTopAssetsResponseSchema.parse(await apiFetch(`/generation-top-assets?${search}`));
+        return generationTopAssetsResponseSchema.parse(await apiFetch(`/generation-top-assets?${search}`, 300));
       },
       refetchInterval: REFETCH_INTERVAL_MS,
     }),

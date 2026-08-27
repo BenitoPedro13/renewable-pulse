@@ -21,7 +21,7 @@ export const generationLatestCache = {
       queryFn: async (): Promise<GenerationLatestResponse> => {
         const search = new URLSearchParams({ source: params.source });
         if (params.zones?.length) search.set("zone", params.zones.join(","));
-        return generationLatestResponseSchema.parse(await apiFetch(`/generation-latest?${search}`));
+        return generationLatestResponseSchema.parse(await apiFetch(`/generation-latest?${search}`, 300));
       },
       refetchInterval: REFETCH_INTERVAL_MS,
     }),

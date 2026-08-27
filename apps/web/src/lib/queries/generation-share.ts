@@ -22,7 +22,7 @@ export const generationShareCache = {
           to: params.to,
           bucket: "day",
         });
-        return generationShareResponseSchema.parse(await apiFetch(`/generation-share?${search}`));
+        return generationShareResponseSchema.parse(await apiFetch(`/generation-share?${search}`, 300));
       },
       refetchInterval: REFETCH_INTERVAL_MS,
     }),

@@ -1,9 +1,9 @@
 "use client";
 
 import type { Metric } from "@renewable-pulse/contracts";
-import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { useFixedDateRange } from "@/hooks/use-fixed-date-range";
 import { useGenerationMix } from "@/hooks/use-generation-mix";
 import { ONS_ZONES } from "@/lib/zones";
 
@@ -19,15 +19,6 @@ const chartConfig = {
   nuclear: { label: "Nuclear", color: "var(--chart-5)" },
   other: { label: "Other", color: "var(--chart-5)" },
 } satisfies ChartConfig;
-
-function useDateRange(days: number) {
-  const [range] = useState(() => {
-    const to = new Date();
-    const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
-    return { from: from.toISOString(), to: to.toISOString() };
-  });
-  return range;
-}
 
 type CountryRow = { country: string } & Partial<Record<Metric, number>>;
 
@@ -50,7 +41,7 @@ function toPercentRow(country: string, rows: { metric: Metric; value: number }[]
  * heavily thermal/nuclear where Brazil leans hydro).
  */
 export function CompositionComparisonChart({ visibleMetrics = METRIC_ORDER }: { visibleMetrics?: Metric[] }) {
-  const { from, to } = useDateRange(DAYS);
+  const { from, to } = useFixedDateRange(DAYS);
   const ons = useGenerationMix({ source: "ONS", zones: ONS_ZONES, from, to, bucket: "day" });
   const eia = useGenerationMix({ source: "EIA", zones: ["US-US48"], from, to, bucket: "day" });
 

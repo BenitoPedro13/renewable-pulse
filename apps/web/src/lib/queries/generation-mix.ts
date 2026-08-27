@@ -25,7 +25,7 @@ export const generationMixCache = {
           to: params.to,
           bucket: params.bucket,
         });
-        return generationMixResponseSchema.parse(await apiFetch(`/generation-mix?${search}`));
+        return generationMixResponseSchema.parse(await apiFetch(`/generation-mix?${search}`, 300));
       },
       refetchInterval: REFETCH_INTERVAL_MS,
     }),
