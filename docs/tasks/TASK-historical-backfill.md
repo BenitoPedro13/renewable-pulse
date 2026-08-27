@@ -361,11 +361,39 @@ access at all; it needs a deployment whose process *is* the backfill run:
 4. Delete or pause the `ingest-backfill` service between runs (per provider, or per resume) rather
    than leaving it deployed — it's a one-off job, not a fourth persistent service.
 
-This is a **new, not-yet-attempted mechanism** — the concrete Railway CLI/`railway.ts` commands
-for step 1 (service creation, start-command override, env var reuse from an existing service)
-still need to be worked out live, the same way `docs/tasks/TASK-railway-deploy.md §5.1` had to
-work out this project's other Railway surprises by trying them. Do not assume the exact
-`railway.ts` syntax above is correct until it's actually deployed once.
+**Validated live, 2026-08-27.** The `ingest-backfill` service was created via `.railway/railway.ts`
++ `railway config apply` (confirmed zero destructive drift via `railway config plan` first, per
+the process `docs/tasks/TASK-railway-deploy.md §7` already learned to use after a past near-miss).
+Two things learned only by actually running it, neither of which was obvious in advance:
+
+- **`preserve()` does not copy env vars between services** — it only protects an *existing* var
+  from deletion on `apply`. A brand-new service has nothing to preserve, so `ingest-backfill`
+  came up with no `REDPANDA_BROKERS` at all, silently fell back to `main.go`'s
+  `localhost:19092` default, and hung indefinitely inside `pub.Publish` trying to reach a broker
+  that doesn't exist in that container — no error, no log line, just silence. Fixed by explicitly
+  `railway variable set`-ing `REDPANDA_BROKERS`/`READINGS_TOPIC`/`MAX_IN_FLIGHT`/`POLL_INTERVAL`
+  (copied from `ingest`) and, before the real pilot, `ENTSOE_API_TOKEN`. **Anyone standing this
+  service back up for a future run must set these explicitly — they are not inherited.**
+- **Railway's own log ingestion caps at 500 logs/sec per replica and silently drops the rest**
+  (`Messages dropped: N` lines appear in `railway logs` output). ONS's per-skipped-row logging hit
+  this immediately even on a single current-month `--once` run. For the eventual full ONS
+  backfill (25 years, hundreds of plants), do not rely on `railway logs` scrollback as the
+  completion signal — use `/pipeline-health`'s `dlqDepth`/`consumerLag`/`lastSuccessAt` instead,
+  which reflects the real database state regardless of dropped log lines.
+
+With those two fixes, the mechanism worked cleanly end to end: a real `/ingest --once` run
+(current-month ONS, hundreds of plants) round-tripped through Redpanda → consumer → TimescaleDB
+with `dlqDepth: 0` and `consumerLag: 0`; the `ingest-backfill` service showed `Completed` (clean
+exit, no restart loop) rather than looping. The real ENTSO-E pilot this section calls for was then
+run for real — `--backfill=entsoe --backfill-from=2026-07-01` (~8 weeks, all 6 zones) — and
+finished cleanly: `dlqDepth: 0`, `consumerLag: 0`, and the final logged chunk
+(`zone=NL start=2026-07-01T00:00:00Z`) exactly matched `--backfill-from`, confirming the
+newest→oldest walk correctly reached and stopped at the requested floor. The only skipped rows
+were `unmapped psrType "B17"` (Waste) — an already-documented, deliberate exclusion
+(`entsoe/normalize.go:16-17`), not a bug. §2.5's manual `refresh_continuous_aggregate` call was
+then run for the backfilled range, and the data confirmed visible through
+`GET /generation-mix?source=ENTSOE&zone=NO-NO1&...` — real July 2026 hourly hydro/wind/solar
+values, not just present in the raw table.
 
 **Volume/backpressure:** the `redpanda-volume` is provisioned at 5000MB
 (`.railway/railway.ts:12`) — a real capacity constraint if a backfill produces messages faster

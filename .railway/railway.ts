@@ -9,8 +9,18 @@ import { defineRailway, empty, image, preserve, project, service, volume } from 
 // `railway config apply` doesn't try to delete them. See
 // docs/tasks/TASK-railway-deploy.md.
 export default defineRailway(() => {
-  const redpandaVolume = volume("redpanda-volume", { region: "sfo", sizeMB: 5000 });
-  const timescaledbVolume = volume("timescaledb-volume", { region: "sfo", sizeMB: 5000 });
+  const redpandaVolume = volume("redpanda-volume", {
+    region: "sfo",
+    sizeMB: 5000,
+    allowOnlineResize: true,
+    alerts: { usage: { "80": {}, "95": {}, "100": {} } },
+  });
+  const timescaledbVolume = volume("timescaledb-volume", {
+    region: "sfo",
+    sizeMB: 5000,
+    allowOnlineResize: true,
+    alerts: { usage: { "80": {}, "95": {}, "100": {} } },
+  });
 
   const timescaledb = service("timescaledb", {
     source: image("timescale/timescaledb:latest-pg17"),
@@ -25,7 +35,7 @@ export default defineRailway(() => {
     // image's non-root USER can't mkdir/chown into it on first boot
     // (confirmed live). See docs/tasks/TASK-railway-deploy.md §2.1.
     source: empty(),
-    build: { builder: "DOCKERFILE", dockerfilePath: "infra/redpanda/Dockerfile" },
+    build: { builder: "DOCKERFILE", dockerfilePath: "infra/redpanda/Dockerfile", buildEnvironment: "V3" },
     replicas: { sfo: 1 },
     volumeMounts: { "/var/lib/redpanda/data": redpandaVolume },
     // Single internal listener — nothing needs to reach Kafka from outside
@@ -56,7 +66,39 @@ export default defineRailway(() => {
   // instead fails with "/go.mod: not found" — COPY paths always resolve
   // against the build context root, not the Dockerfile's own directory.
   const ingest = service("ingest", {
-    build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile" },
+    build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile", buildEnvironment: "V3" },
+    replicas: { sfo: 1 },
+    env: {
+      EIA_API_KEY: preserve(),
+      ENTSOE_API_TOKEN: preserve(),
+      MAX_IN_FLIGHT: preserve(),
+      POLL_INTERVAL: preserve(),
+      READINGS_TOPIC: preserve(),
+      REDPANDA_BROKERS: preserve(),
+    },
+  });
+
+  // One-off historical-backfill runner (docs/tasks/TASK-historical-backfill.md
+  // §2.7), added 2026-08-27 — same image/build as `ingest`, but its `start`
+  // overrides the container's ENTRYPOINT with a --backfill invocation
+  // instead of the live-polling default. Exists as a separate service
+  // (not a `railway ssh` exec into `ingest`) because `ingest`'s image is
+  // built FROM gcr.io/distroless/static-debian12:nonroot
+  // (apps/ingest/Dockerfile:14), which has no shell at all — confirmed
+  // live: `railway ssh --service ingest -- echo ok` fails with "container
+  // does not have a shell (bash or sh)". A normal deployment execs
+  // ENTRYPOINT directly and never needs one, so this sidesteps that
+  // limitation entirely rather than requiring a debug/shell-enabled image.
+  // `start` here is a placeholder — updated per run to whichever provider/
+  // date-range is being backfilled next; not meant to stay in sync with
+  // any one in-progress run.
+  const ingestBackfill = service("ingest-backfill", {
+    build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile", buildEnvironment: "V3" },
+    replicas: { sfo: 1 },
+    // ENTSO-E pilot run (docs/tasks/TASK-historical-backfill.md §2.3/§2.7):
+    // ~8 weeks, all 6 zones, ahead of committing to the full 2015-01->now
+    // depth. Update this per run.
+    start: "/ingest --backfill=entsoe --backfill-from=2026-07-01",
     env: {
       EIA_API_KEY: preserve(),
       ENTSOE_API_TOKEN: preserve(),
@@ -69,7 +111,8 @@ export default defineRailway(() => {
 
   const consumer = service("consumer", {
     source: empty(),
-    build: { builder: "DOCKERFILE", dockerfilePath: "apps/consumer/Dockerfile" },
+    build: { builder: "DOCKERFILE", dockerfilePath: "apps/consumer/Dockerfile", buildEnvironment: "V3" },
+    replicas: { sfo: 1 },
     env: { DATABASE_URL: preserve(), READINGS_TOPIC: preserve(), REDPANDA_BROKERS: preserve() },
   });
 
@@ -79,7 +122,7 @@ export default defineRailway(() => {
   // some connected browsers (docs/architecture.md §4).
   const api = service("api", {
     source: empty(),
-    build: { builder: "DOCKERFILE", dockerfilePath: "apps/api/Dockerfile" },
+    build: { builder: "DOCKERFILE", dockerfilePath: "apps/api/Dockerfile", buildEnvironment: "V3" },
     replicas: { sfo: 1 },
     env: {
       ALLOWED_ORIGINS: preserve(),
@@ -95,6 +138,6 @@ export default defineRailway(() => {
   });
 
   return project("renewable-pulse", {
-    resources: [timescaledb, redpanda, redpandaVolume, timescaledbVolume, ingest, consumer, api],
+    resources: [timescaledb, redpanda, redpandaVolume, timescaledbVolume, ingest, ingestBackfill, consumer, api],
   });
 });
