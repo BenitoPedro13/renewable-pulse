@@ -12,9 +12,45 @@ const inter = Inter({
   subsets: ["latin"],
 });
 
+// The real, currently-deployed production URL (docs/tasks/TASK-railway-deploy.md)
+// — required for Next to resolve absolute URLs for the OG image / icons.
+// Update if a custom domain replaces it.
+const siteUrl = "https://renewable-pulse.up.railway.app";
+const description =
+  "A live instrument panel for how much of the world's electricity already comes from renewables — Brazil's hydro-heavy grid, compared against Norway and the USA. Every reading traces back to a real ONS, ENTSO-E, or EIA API response.";
+
 export const metadata: Metadata = {
-  title: "Renewable Pulse",
-  description: "A live instrument panel for how much of the world's electricity already comes from renewables.",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "Renewable Pulse",
+    template: "%s · Renewable Pulse",
+  },
+  description,
+  keywords: [
+    "renewable energy",
+    "grid data",
+    "electricity generation",
+    "Brazil ONS",
+    "EIA",
+    "ENTSO-E",
+    "live dashboard",
+    "energy mix",
+  ],
+  authors: [{ name: "Renewable Pulse" }],
+  robots: { index: true, follow: true },
+  openGraph: {
+    type: "website",
+    url: siteUrl,
+    siteName: "Renewable Pulse",
+    title: "Renewable Pulse",
+    description,
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Renewable Pulse",
+    description,
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
