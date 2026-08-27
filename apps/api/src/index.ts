@@ -1,6 +1,7 @@
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
 import Fastify from "fastify";
+import { cacheControlFor } from "./cache-control.js";
 import { pool } from "./db.js";
 import { startLiveConsumer } from "./live/consumer.js";
 import { LiveHub } from "./live/hub.js";
@@ -33,6 +34,12 @@ await app.register(websocket, {
     },
   },
 });
+app.addHook("onSend", async (request, reply, payload) => {
+  const cacheControl = cacheControlFor(request.method, request.url.split("?")[0] ?? request.url);
+  if (cacheControl) reply.header("Cache-Control", cacheControl);
+  return payload;
+});
+
 await app.register(readingsRoute);
 await app.register(pipelineHealthRoute);
 await app.register(generationMixRoute);
