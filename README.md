@@ -124,19 +124,21 @@ and Redpanda Console at `http://localhost:8080` are useful for watching the pipe
 
 ## Deployment
 
-Live on Railway (project `renewable-pulse`): **[renewable-pulse.up.railway.app](https://renewable-pulse.up.railway.app)**
-(dashboard), API at `api-production-31f3.up.railway.app`. Six services — `ingest`, `consumer`,
-`api`, `web`, plus self-hosted `redpanda` and `timescaledb` (Railway has no managed Postgres
-variant with the Timescale extension) — each built from this repo's own per-service
-Dockerfiles via `.railway/railway.ts` (Railway's config-as-code) + `railway up`. No GitHub App
-connection required. Full topology, the platform-specific gotchas hit along the way (registry
-reachability, non-root volume permissions, Docker build-context paths), and verification steps
-are in `docs/tasks/TASK-railway-deploy.md`.
+**API on Railway** (project `renewable-pulse`): `api-production-31f3.up.railway.app`. Five
+services — `ingest`, `consumer`, `api`, plus self-hosted `redpanda` and `timescaledb` (Railway
+has no managed Postgres variant with the Timescale extension) — each built from this repo's own
+per-service Dockerfiles via `.railway/railway.ts` (Railway's config-as-code) + `railway up`. No
+GitHub App connection required. Full topology, the platform-specific gotchas hit along the way
+(registry reachability, non-root volume permissions, Docker build-context paths), and
+verification steps are in `docs/tasks/TASK-railway-deploy.md`.
 
-`apps/web` is **also** mirrored on Vercel — **[renewable-pulse.vercel.app](https://renewable-pulse.vercel.app)**
-— for its edge network, auto-deploying on every push to `main`. `apps/api`'s data routes send
-long `Cache-Control` headers (§7 of the task doc) since every reading is identical for every
-visitor and the upstream sources only refresh hourly.
+**Dashboard on Vercel**: **[renewable-pulse.vercel.app](https://renewable-pulse.vercel.app)**,
+auto-deploying on every push to `main`. `apps/web` ran on Railway too until 2026-08-27 — moved
+to Vercel-only once the dashboard's initial data fetch became a real server-side prefetch
+(`app/page.tsx`), which needs Next's fetch Data Cache/edge network to actually pay off; a plain
+Docker deploy doesn't get that. `apps/api`'s data routes also send long `Cache-Control` headers
+(§7 of the task doc) since every reading is identical for every visitor and the upstream sources
+only refresh hourly.
 
 ## Docs
 

@@ -263,25 +263,42 @@ deliberately excluded — health must reflect current state, not a cached snapsh
 
 That alone only helps *repeat* visits from the *same* browser. To get a shared edge cache — a
 different visitor getting a prior visitor's cached response, globally, without hitting Railway —
-`apps/web` is **also** deployed to Vercel (`renewable-pulse.vercel.app`, project linked to
+`apps/web` was **also** deployed to Vercel (`renewable-pulse.vercel.app`, project linked to
 `BenitoPedro13/renewable-pulse`, root directory `apps/web`, auto-deploys on every push to `main`
-via Vercel's own GitHub integration — no extra CI step needed for this one). This is additive,
-not a replacement: `apps/web` still runs on Railway too (`renewable-pulse.up.railway.app`) via the
-existing Docker/CI pipeline above. Both currently serve the same client-side-fetching build, so
-Vercel's benefit today is its edge network for the static shell/assets — `apps/web/next.config.ts`
+via Vercel's own GitHub integration — no extra CI step needed for this one). `apps/web/next.config.ts`
 needed a one-line fix for this (§5.1 item 9).
 
-**Still open, not yet built:** actually caching the *data* at Vercel's edge (so a second, different
-visitor gets an instant response, not just a second visit from the same browser) needs the
-dashboard's initial data fetch moved from client-side TanStack Query to a server-side fetch with
-Next's own cache (`fetch(..., { next: { revalidate: 300 } })` in a Server Component, then hydrating
-TanStack Query for the live layer) — a real architecture change, not just a hosting change,
-deliberately deferred pending the user's go-ahead. `NEXT_PUBLIC_API_BASE_URL` and
-`NEXT_PUBLIC_MAPBOX_TOKEN` are set as Vercel project env vars (Config type, not Secret — both are
-`NEXT_PUBLIC_*` values already inlined into the client bundle, so nothing is actually hidden by
-marking them Secret) via the dashboard (no Vercel MCP tool exposes env-var writes; the CLI would
-need its own separate `vercel login`, so the dashboard was faster than either).
+**Built (2026-08-27):** the dashboard's initial data fetch moved from pure client-side TanStack
+Query to a server-side prefetch — `apps/web/src/app/page.tsx` (a Server Component) calls
+`prefetchDashboardQueries` (`apps/web/src/lib/prefetch-dashboard.ts`) into a fresh `QueryClient`,
+dehydrates it into a `HydrationBoundary` around the existing `DashboardShell`. No existing
+component/hook changed — they just find data already in cache on first render. `apiFetch`
+(`apps/web/src/lib/api.ts`) threads a `revalidateSeconds` option into `fetch(..., { next:
+{ revalidate } })`, which only takes effect server-side (a browser `fetch()` ignores the `next`
+option), so the same `queryFn` works unmodified in both places. The other required half:
+`apps/web/src/lib/cached-date-range.ts` replaced every `new Date()`-based `{from,to}` with one
+rounded to a 5-minute boundary (matching `apps/api`'s own `max-age=300`) — without this, every
+request's URL is millisecond-unique and nothing can ever share a cache entry. Confirmed live:
+`x-vercel-cache: HIT` with a climbing `age` on repeated requests, and Next auto-promoted `/` to
+ISR (5-minute revalidate) once every fetch on the page shared a consistent revalidate window.
+`NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_MAPBOX_TOKEN` are set as Vercel project env vars
+(Config type, not Secret — both are `NEXT_PUBLIC_*` values already inlined into the client
+bundle) via the dashboard (no Vercel MCP tool exposes env-var writes; the CLI would need its own
+separate `vercel login`, so the dashboard was faster than either).
 
-Also open: whether to keep running `apps/web` on **both** Railway and Vercel long-term (cost is
-low either way on usage-based billing, but it's a real duplication) — not decided, flagged here
-rather than resolved unilaterally.
+**Decided (2026-08-27), with the user: `apps/web` is Vercel-only now**, removed from Railway —
+resolves the "both platforms" duplication this section originally flagged as open. Removing a
+service declared in `.railway/railway.ts` needs care: `.railway/railway.ts` had drifted from
+reality (every env var set via `railway variable set` after the last `config apply`/`pull` wasn't
+reflected in the file), so a naive edit-and-`config apply` would have tried to delete every other
+service's real env vars (`DATABASE_URL`, `POSTGRES_PASSWORD`, `ALLOWED_ORIGINS`, API keys — a
+20+-item destructive plan) to match the stale file, not just remove `web`. Fixed by running
+`railway config pull --force` first (re-syncs the file from the real project state — secrets come
+back as `preserve()` markers, never actual values, so this is safe to commit), confirming
+`railway config plan` showed zero drift, *then* removing the `web` service block and re-running
+`plan` to confirm it now showed only that one deletion before `apply`. `apps/api`'s
+`ALLOWED_ORIGINS` was updated to drop the Railway web origin, and `.github/workflows/ci.yml`'s
+`deploy` job no longer has a "Deploy web" step (Vercel's own GitHub integration already covers
+it). `apps/web/Dockerfile` and `infra/redpanda/Dockerfile`-style Railway-specific files for `web`
+were left in the repo, unused but harmless, rather than deleted — not asked for, and cheap to keep
+as a reference if Railway hosting for `web` is ever wanted again.

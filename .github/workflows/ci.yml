@@ -89,8 +89,11 @@ jobs:
         if: steps.gate.outputs.skip == 'false'
         run: railway up ./apps/ingest --path-as-root --service ingest --ci
 
-      # consumer/api/web keep the repo-root build context — turbo prune
-      # needs the whole workspace visible.
+      # consumer/api keep the repo-root build context — turbo prune needs
+      # the whole workspace visible. web is no longer deployed here — it
+      # runs on Vercel only (removed from Railway 2026-08-27, see
+      # docs/tasks/TASK-railway-deploy.md §7), which already auto-deploys
+      # on push via its own GitHub integration.
       - name: Deploy consumer
         if: steps.gate.outputs.skip == 'false'
         run: railway up --service consumer --ci
@@ -98,7 +101,3 @@ jobs:
       - name: Deploy api
         if: steps.gate.outputs.skip == 'false'
         run: railway up --service api --ci
-
-      - name: Deploy web
-        if: steps.gate.outputs.skip == 'false'
-        run: railway up --service web --ci

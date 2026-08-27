@@ -1,10 +1,13 @@
-import { defineRailway, empty, image, project, service, volume } from "railway/iac";
+import { defineRailway, empty, image, preserve, project, service, volume } from "railway/iac";
 
 // Structural config only (source/build/deploy shape) — env vars, including
 // secrets and cross-service references (DATABASE_URL, REDPANDA_BROKERS,
-// ALLOWED_ORIGINS, NEXT_PUBLIC_*), are set imperatively via
-// `railway variable set` instead of here, so nothing secret ever lands in
-// this committed file. See docs/tasks/TASK-railway-deploy.md.
+// ALLOWED_ORIGINS), are set imperatively via `railway variable set` instead
+// of here, so nothing secret ever lands in this committed file; they show up
+// below as `preserve()` (pulled from the real project via `railway config
+// pull`, which never writes actual secret values into this file) purely so
+// `railway config apply` doesn't try to delete them. See
+// docs/tasks/TASK-railway-deploy.md.
 export default defineRailway(() => {
   const redpandaVolume = volume("redpanda-volume", { region: "sfo", sizeMB: 5000 });
   const timescaledbVolume = volume("timescaledb-volume", { region: "sfo", sizeMB: 5000 });
@@ -13,6 +16,7 @@ export default defineRailway(() => {
     source: image("timescale/timescaledb:latest-pg17"),
     replicas: { sfo: 1 },
     volumeMounts: { "/var/lib/postgresql/data": timescaledbVolume },
+    env: { PGDATA: preserve(), POSTGRES_DB: preserve(), POSTGRES_PASSWORD: preserve(), POSTGRES_USER: preserve() },
   });
 
   const redpanda = service("redpanda", {
@@ -35,11 +39,14 @@ export default defineRailway(() => {
       "/entrypoint.sh redpanda start --kafka-addr internal://0.0.0.0:9092 --advertise-kafka-addr internal://redpanda.railway.internal:9092 --rpc-addr 0.0.0.0:33145 --advertise-rpc-addr redpanda.railway.internal:33145 --mode dev-container --smp 1 --default-log-level=info",
   });
 
-  // ingest/consumer/api/web build from this repo's own Dockerfiles via a
-  // local `railway up` upload (source: empty() — no GitHub App connection
+  // ingest/consumer/api build from this repo's own Dockerfiles via a local
+  // `railway up` upload (source: empty() — no GitHub App connection
   // required). Build context is always the repo root (turbo prune needs
   // the whole workspace visible), so only dockerfilePath varies per
-  // service — docs/tasks/TASK-railway-deploy.md §2.3.
+  // service — docs/tasks/TASK-railway-deploy.md §2.3. `web` was removed
+  // from Railway (2026-08-27) — it now runs on Vercel only, which gets it
+  // real edge-cached data (Next's fetch Data Cache), not just a Docker
+  // deploy; see docs/tasks/TASK-railway-deploy.md §7.
   // ingest is deployed with the repo's apps/ingest directory itself as the
   // upload root (`railway up ./apps/ingest --path-as-root`), not the repo
   // root — its Dockerfile's COPY paths (go.mod, go.sum) are written
@@ -50,11 +57,13 @@ export default defineRailway(() => {
   // against the build context root, not the Dockerfile's own directory.
   const ingest = service("ingest", {
     build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile" },
+    env: { EIA_API_KEY: preserve(), MAX_IN_FLIGHT: preserve(), POLL_INTERVAL: preserve(), READINGS_TOPIC: preserve(), REDPANDA_BROKERS: preserve() },
   });
 
   const consumer = service("consumer", {
     source: empty(),
     build: { builder: "DOCKERFILE", dockerfilePath: "apps/consumer/Dockerfile" },
+    env: { DATABASE_URL: preserve(), READINGS_TOPIC: preserve(), REDPANDA_BROKERS: preserve() },
   });
 
   // api must stay single-replica — it runs a second in-process Kafka
@@ -65,14 +74,20 @@ export default defineRailway(() => {
     source: empty(),
     build: { builder: "DOCKERFILE", dockerfilePath: "apps/api/Dockerfile" },
     replicas: { sfo: 1 },
-  });
-
-  const web = service("web", {
-    source: empty(),
-    build: { builder: "DOCKERFILE", dockerfilePath: "apps/web/Dockerfile" },
+    env: {
+      ALLOWED_ORIGINS: preserve(),
+      DATABASE_URL: preserve(),
+      EIA_API_KEY: preserve(),
+      HOST: preserve(),
+      LIVE_GROUP_ID: preserve(),
+      LIVE_HEARTBEAT_MS: preserve(),
+      PORT: preserve(),
+      READINGS_TOPIC: preserve(),
+      REDPANDA_BROKERS: preserve(),
+    },
   });
 
   return project("renewable-pulse", {
-    resources: [timescaledb, redpanda, redpandaVolume, timescaledbVolume, ingest, consumer, api, web],
+    resources: [timescaledb, redpanda, redpandaVolume, timescaledbVolume, ingest, consumer, api],
   });
 });
