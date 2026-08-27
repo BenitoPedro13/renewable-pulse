@@ -57,7 +57,14 @@ export default defineRailway(() => {
   // against the build context root, not the Dockerfile's own directory.
   const ingest = service("ingest", {
     build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile" },
-    env: { EIA_API_KEY: preserve(), MAX_IN_FLIGHT: preserve(), POLL_INTERVAL: preserve(), READINGS_TOPIC: preserve(), REDPANDA_BROKERS: preserve() },
+    env: {
+      EIA_API_KEY: preserve(),
+      ENTSOE_API_TOKEN: preserve(),
+      MAX_IN_FLIGHT: preserve(),
+      POLL_INTERVAL: preserve(),
+      READINGS_TOPIC: preserve(),
+      REDPANDA_BROKERS: preserve(),
+    },
   });
 
   const consumer = service("consumer", {
