@@ -446,10 +446,18 @@ local stack rather than guessed at:
 3. **A USA per-plant leaderboard (mirroring `PlantLeaderboard`) does not exist and is not a bug**:
    `PlantLeaderboard`/`GET /generation-top-assets` are ONS-only by design (§2.7) because only ONS
    readings carry a per-plant `asset_id` — EIA's fuel-type-data is respondent/zone-level only, with
-   no individual generator granularity. A capacity-based analog (ranking EIA-860's *registered*
-   generator capacity instead of live output) is possible but is a materially different metric
-   (installed capacity vs. observed generation) and was left for a explicit decision rather than
-   silently building it under the same "leaderboard" framing.
+   no individual generator granularity. User asked for a capacity-based analog after this
+   constraint was explained; built as `PlantCapacityLeaderboard`
+   (`apps/web/src/components/dashboard/plant-capacity-leaderboard.tsx`), ranking the same real
+   EIA-860 data the USA plant map already fetches (`usePlants("EIA_860")`, sharing that query's
+   cache — no new endpoint or extra network round-trip) by `installedCapacityKw` per fuel type,
+   client-side, the same "no new endpoint needed" pattern `VolatilityChart` already established in
+   §2.7. Explicitly labeled "registered capacity, not live output" in the UI so it's never read as
+   directly comparable to Brazil's live-output ranking. Verified the existing EIA-860 sample (period
+   -sorted, capped at 5000 of ~4.3M generator-months per `plants.ts`'s existing attribution) still
+   surfaces the real top US thermal plants by capacity (W.A. Parish, Bowen, Crystal River, Barry,
+   Monroe) — large actively-operating plants report every period, so they're virtually always
+   present in any recent sample even though the sample isn't capacity-sorted.
 
 ## 3. Why
 

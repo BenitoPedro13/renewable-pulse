@@ -3,6 +3,7 @@
 import type { Metric } from "@renewable-pulse/contracts";
 import { DiurnalPatternChart } from "@/components/dashboard/diurnal-pattern-chart";
 import { GenerationMixChart } from "@/components/dashboard/generation-mix-chart";
+import { PlantCapacityLeaderboard } from "@/components/dashboard/plant-capacity-leaderboard";
 import { RegionalMixChart } from "@/components/dashboard/regional-mix-chart";
 import { VolatilityChart } from "@/components/dashboard/volatility-chart";
 import { GENERATION_SHARE_LABEL, useGenerationShare } from "@/hooks/use-generation-share";
@@ -26,12 +27,15 @@ function CurrentShare() {
 }
 
 /**
- * USA deep-dive, mirroring Brazil's section (§2.7/§2.8 in
+ * USA deep-dive, mirroring Brazil's section (§2.7/§2.8/§2.9 in
  * docs/tasks/TASK-live-dashboard.md). The national mix/diurnal/volatility
  * charts stay scoped to EIA's US48 national aggregate, and the regional mix
- * chart below adds the seven-RTO breakdown ingested in §2.8 — a US regional
- * plant *map* (mirroring Brazil's) remains deferred pending a verified
- * balancing-authority field on EIA-860.
+ * chart below adds the seven-RTO breakdown ingested in §2.8. The leaderboard
+ * ranks EIA-860 registered *capacity* rather than live output — Brazil's
+ * equivalent ranks live output because ONS readings carry per-plant
+ * asset_id, which EIA's hourly generation data does not (§2.9). A US
+ * regional plant *map* (mirroring Brazil's) remains deferred pending a
+ * verified balancing-authority field on EIA-860.
  */
 export function UsaSection({ visibleMetrics }: { visibleMetrics: Metric[] }) {
   return (
@@ -45,7 +49,10 @@ export function UsaSection({ visibleMetrics }: { visibleMetrics: Metric[] }) {
         <RegionalMixChart source="EIA" zones={USA_REGIONAL_ZONES} label="RTO/ISO" visibleMetrics={visibleMetrics} />
       </div>
       <DiurnalPatternChart source="EIA" zones={["US-US48"]} label="US48 national aggregate" visibleMetrics={visibleMetrics} />
-      <VolatilityChart source="EIA" zones={["US-US48"]} />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <PlantCapacityLeaderboard />
+        <VolatilityChart source="EIA" zones={["US-US48"]} />
+      </div>
     </section>
   );
 }
