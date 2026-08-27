@@ -79,8 +79,12 @@ func TestBackfillONS_StopsAtFloorMonthInclusive(t *testing.T) {
 	}
 	t.Cleanup(func() { fetchAndPublishONSMonthFn = origFetch })
 
-	if err := backfillONS(context.Background(), nil, from, to, nil, time.Millisecond); err != nil {
+	failedChunks, err := backfillONS(context.Background(), nil, from, to, nil, time.Millisecond)
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if failedChunks != 0 {
+		t.Fatalf("want 0 failed chunks, got %d", failedChunks)
 	}
 
 	want := []string{"2000-03", "2000-02", "2000-01"}
@@ -94,16 +98,35 @@ func TestBackfillONS_StopsAtFloorMonthInclusive(t *testing.T) {
 	}
 }
 
-func TestBackfillONS_PropagatesFetchError(t *testing.T) {
+// TestBackfillONS_SkipsFailedChunkAndContinues confirms a single chunk's
+// fetch error doesn't abort the rest of a — potentially hours-long,
+// hundreds-of-chunks-long — backfill run: it's counted and logged, and the
+// loop moves on to the next (older) month rather than returning early.
+func TestBackfillONS_SkipsFailedChunkAndContinues(t *testing.T) {
+	var visited []string
 	origFetch := fetchAndPublishONSMonthFn
-	fetchAndPublishONSMonthFn = func(context.Context, *publish.Publisher, int, time.Month, time.Time) (int, int, error) {
-		return 0, 0, errors.New("boom")
+	fetchAndPublishONSMonthFn = func(_ context.Context, _ *publish.Publisher, year int, month time.Month, _ time.Time) (int, int, error) {
+		key := time.Date(year, month, 1, 0, 0, 0, 0, time.UTC).Format("2006-01")
+		visited = append(visited, key)
+		if key == "2000-02" {
+			return 0, 0, errors.New("boom")
+		}
+		return 0, 0, nil
 	}
 	t.Cleanup(func() { fetchAndPublishONSMonthFn = origFetch })
 
 	from := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-	to := time.Date(2000, 1, 15, 0, 0, 0, 0, time.UTC)
-	if err := backfillONS(context.Background(), nil, from, to, nil, time.Millisecond); err == nil {
-		t.Fatal("want error to propagate from a failed chunk, got nil")
+	to := time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC)
+	failedChunks, err := backfillONS(context.Background(), nil, from, to, nil, time.Millisecond)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if failedChunks != 1 {
+		t.Fatalf("want 1 failed chunk, got %d", failedChunks)
+	}
+
+	want := []string{"2000-03", "2000-02", "2000-01"}
+	if len(visited) != len(want) {
+		t.Fatalf("visited %v, want %v (a failed chunk must not stop the walk)", visited, want)
 	}
 }

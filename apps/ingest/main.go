@@ -350,24 +350,33 @@ func runBackfill(ctx context.Context, pub *publish.Publisher, source, fromStr, t
 		resumeFrom = &t
 	}
 
+	var failedChunks int
 	switch source {
 	case "ons":
-		return backfillONS(ctx, pub, from, to, resumeFrom, rateLimitDelayOrDefault(rateLimitDelay, onsDefaultBackfillDelay))
+		failedChunks, err = backfillONS(ctx, pub, from, to, resumeFrom, rateLimitDelayOrDefault(rateLimitDelay, onsDefaultBackfillDelay))
 	case "entsoe":
 		token := os.Getenv("ENTSOE_API_TOKEN")
 		if token == "" {
 			return fmt.Errorf("ENTSOE_API_TOKEN must be set for --backfill=entsoe")
 		}
-		return backfillEntsoe(ctx, pub, token, from, to, resumeFrom, rateLimitDelayOrDefault(rateLimitDelay, entsoeDefaultBackfillDelay))
+		failedChunks, err = backfillEntsoe(ctx, pub, token, from, to, resumeFrom, rateLimitDelayOrDefault(rateLimitDelay, entsoeDefaultBackfillDelay))
 	case "eia":
 		apiKey := os.Getenv("EIA_API_KEY")
 		if apiKey == "" {
 			return fmt.Errorf("EIA_API_KEY must be set for --backfill=eia")
 		}
-		return backfillEIA(ctx, pub, apiKey, from, to, resumeFrom, rateLimitDelayOrDefault(rateLimitDelay, eiaDefaultBackfillDelay))
+		failedChunks, err = backfillEIA(ctx, pub, apiKey, from, to, resumeFrom, rateLimitDelayOrDefault(rateLimitDelay, eiaDefaultBackfillDelay))
 	default:
 		return fmt.Errorf(`unknown --backfill=%q (want "ons", "entsoe", or "eia")`, source)
 	}
+	if err != nil {
+		return err
+	}
+	log.Printf("ingest: %s: backfill complete, failed_chunks=%d", source, failedChunks)
+	if failedChunks > 0 {
+		log.Printf("ingest: %s: %d chunk(s) failed and were skipped — re-run with a narrow --backfill-from/--backfill-to to fill those gaps", source, failedChunks)
+	}
+	return nil
 }
 
 // sleepBetweenChunks pauses for delay, or returns ctx.Err() if the process
@@ -383,8 +392,16 @@ func sleepBetweenChunks(ctx context.Context, delay time.Duration) error {
 }
 
 // backfillONS walks backward one calendar month at a time from `to` (or
-// resumeFrom, if set) down to `from`, inclusive.
-func backfillONS(ctx context.Context, pub *publish.Publisher, from, to time.Time, resumeFrom *time.Time, delay time.Duration) error {
+// resumeFrom, if set) down to `from`, inclusive. A single chunk's fetch
+// failure is logged and skipped rather than aborting the whole run — over
+// hundreds of chunks and hours of wall-clock time, an upstream provider's
+// own transient hiccup (a timeout, a 5xx) is expected, not exceptional, and
+// treating it as fatal would make a multi-hour backfill impossible to
+// finish unattended. A skipped chunk just leaves a gap an operator can
+// re-run later with a narrow --backfill-from/--backfill-to targeting it —
+// the same "logged and skipped, never silently faked" posture the DLQ
+// already applies to individual bad rows (docs/architecture.md §5).
+func backfillONS(ctx context.Context, pub *publish.Publisher, from, to time.Time, resumeFrom *time.Time, delay time.Duration) (failedChunks int, err error) {
 	cursor := to
 	if resumeFrom != nil {
 		cursor = *resumeFrom
@@ -394,30 +411,33 @@ func backfillONS(ctx context.Context, pub *publish.Publisher, from, to time.Time
 	for {
 		chunkStart := time.Date(cursor.Year(), cursor.Month(), 1, 0, 0, 0, 0, time.UTC)
 		if chunkStart.Before(floor) {
-			return nil
+			return failedChunks, nil
 		}
 
 		ingestedAt := time.Now().UTC()
-		published, skipped, err := fetchAndPublishONSMonthFn(ctx, pub, chunkStart.Year(), chunkStart.Month(), ingestedAt)
-		if err != nil {
-			return fmt.Errorf("ons backfill %04d-%02d: %w", chunkStart.Year(), int(chunkStart.Month()), err)
+		published, skipped, fetchErr := fetchAndPublishONSMonthFn(ctx, pub, chunkStart.Year(), chunkStart.Month(), ingestedAt)
+		if fetchErr != nil {
+			failedChunks++
+			log.Printf("ingest: ons: backfill chunk FAILED, skipping: month=%04d-%02d: %v", chunkStart.Year(), int(chunkStart.Month()), fetchErr)
+		} else {
+			log.Printf("ingest: ons: backfill chunk complete: month=%04d-%02d published=%d skipped=%d", chunkStart.Year(), int(chunkStart.Month()), published, skipped)
 		}
-		log.Printf("ingest: ons: backfill chunk complete: month=%04d-%02d published=%d skipped=%d", chunkStart.Year(), int(chunkStart.Month()), published, skipped)
 
 		cursor = chunkStart.AddDate(0, -1, 0)
 		if cursor.Before(floor) {
-			return nil
+			return failedChunks, nil
 		}
-		if err := sleepBetweenChunks(ctx, delay); err != nil {
-			return err
+		if sleepErr := sleepBetweenChunks(ctx, delay); sleepErr != nil {
+			return failedChunks, sleepErr
 		}
 	}
 }
 
 // backfillEntsoe walks every configured zone independently, backward in
 // entsoeBackfillChunk windows from `to` (or resumeFrom, if set) down to
-// `from`.
-func backfillEntsoe(ctx context.Context, pub *publish.Publisher, token string, from, to time.Time, resumeFrom *time.Time, delay time.Duration) error {
+// `from`. A single chunk's fetch failure is logged and skipped rather than
+// aborting the whole run — see backfillONS's doc comment for why.
+func backfillEntsoe(ctx context.Context, pub *publish.Publisher, token string, from, to time.Time, resumeFrom *time.Time, delay time.Duration) (failedChunks int, err error) {
 	end := to
 	if resumeFrom != nil {
 		end = *resumeFrom
@@ -432,29 +452,33 @@ func backfillEntsoe(ctx context.Context, pub *publish.Publisher, token string, f
 			}
 
 			ingestedAt := time.Now().UTC()
-			published, skipped, err := fetchAndPublishEntsoeWindow(ctx, pub, token, zone, start, cursor, ingestedAt)
-			if err != nil {
-				return fmt.Errorf("entsoe backfill %s %s..%s: %w", zone.Code, start.Format(time.RFC3339), cursor.Format(time.RFC3339), err)
+			published, skipped, fetchErr := fetchAndPublishEntsoeWindow(ctx, pub, token, zone, start, cursor, ingestedAt)
+			if fetchErr != nil {
+				failedChunks++
+				log.Printf("ingest: entsoe: backfill chunk FAILED, skipping: zone=%s start=%s end=%s: %v", zone.Code, start.Format(time.RFC3339), cursor.Format(time.RFC3339), fetchErr)
+			} else {
+				log.Printf("ingest: entsoe: backfill chunk complete: zone=%s start=%s end=%s published=%d skipped=%d", zone.Code, start.Format(time.RFC3339), cursor.Format(time.RFC3339), published, skipped)
 			}
-			log.Printf("ingest: entsoe: backfill chunk complete: zone=%s start=%s end=%s published=%d skipped=%d", zone.Code, start.Format(time.RFC3339), cursor.Format(time.RFC3339), published, skipped)
 
 			cursor = start
 			if !cursor.After(from) {
 				break
 			}
-			if err := sleepBetweenChunks(ctx, delay); err != nil {
-				return err
+			if sleepErr := sleepBetweenChunks(ctx, delay); sleepErr != nil {
+				return failedChunks, sleepErr
 			}
 		}
 	}
-	return nil
+	return failedChunks, nil
 }
 
 // backfillEIA walks backward in eiaBackfillChunk windows from `to` (or
 // resumeFrom, if set) down to `from`, across every configured respondent in
 // one request per chunk (eia.FetchFuelTypeData already fans out
-// facets[respondent][] in a single call).
-func backfillEIA(ctx context.Context, pub *publish.Publisher, apiKey string, from, to time.Time, resumeFrom *time.Time, delay time.Duration) error {
+// facets[respondent][] in a single call). A single chunk's fetch failure is
+// logged and skipped rather than aborting the whole run — see backfillONS's
+// doc comment for why.
+func backfillEIA(ctx context.Context, pub *publish.Publisher, apiKey string, from, to time.Time, resumeFrom *time.Time, delay time.Duration) (failedChunks int, err error) {
 	cursor := to
 	if resumeFrom != nil {
 		cursor = *resumeFrom
@@ -467,21 +491,23 @@ func backfillEIA(ctx context.Context, pub *publish.Publisher, apiKey string, fro
 		}
 
 		ingestedAt := time.Now().UTC()
-		published, skipped, err := fetchAndPublishEIAWindow(ctx, pub, apiKey, start, cursor, ingestedAt)
-		if err != nil {
-			return fmt.Errorf("eia backfill %s..%s: %w", start.Format(time.RFC3339), cursor.Format(time.RFC3339), err)
+		published, skipped, fetchErr := fetchAndPublishEIAWindow(ctx, pub, apiKey, start, cursor, ingestedAt)
+		if fetchErr != nil {
+			failedChunks++
+			log.Printf("ingest: eia: backfill chunk FAILED, skipping: start=%s end=%s: %v", start.Format(time.RFC3339), cursor.Format(time.RFC3339), fetchErr)
+		} else {
+			log.Printf("ingest: eia: backfill chunk complete: start=%s end=%s published=%d skipped=%d", start.Format(time.RFC3339), cursor.Format(time.RFC3339), published, skipped)
 		}
-		log.Printf("ingest: eia: backfill chunk complete: start=%s end=%s published=%d skipped=%d", start.Format(time.RFC3339), cursor.Format(time.RFC3339), published, skipped)
 
 		cursor = start
 		if !cursor.After(from) {
 			break
 		}
-		if err := sleepBetweenChunks(ctx, delay); err != nil {
-			return err
+		if sleepErr := sleepBetweenChunks(ctx, delay); sleepErr != nil {
+			return failedChunks, sleepErr
 		}
 	}
-	return nil
+	return failedChunks, nil
 }
 
 func envString(key, fallback string) string {
