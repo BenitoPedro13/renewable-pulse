@@ -504,6 +504,18 @@ No new API routes or contract changes — every endpoint `EuropeSection` uses (`
 `/generation-share`) already accepted `ENTSOE` as a valid `source` (§2.7's schema widening), it
 simply returned empty rows until today.
 
+**Recurrence of the `generation_hourly` cold-start gap** (`docs/tasks/TASK-railway-deploy.md`
+§5.1 item 8): right after the token went live, `EuropeSection` showed "No verified readings yet"
+for ~20 minutes even though real ENTSO-E rows already existed in the raw `readings` table
+(confirmed via `/generation-latest`) — the same one-hour continuous-aggregate refresh lag hit
+originally at launch, recurring here because ENTSO-E is effectively a brand-new data source
+starting from zero rows in `generation_hourly`, not a new bug. Fixed the same documented way:
+`railway ssh --service timescaledb -- psql -U renewable_pulse -d renewable_pulse -c
+"CALL refresh_continuous_aggregate('generation_hourly', NULL, NULL);"`. Confirmed live
+afterward: `/generation-mix?source=ENTSOE` returned real MAW rows, and the deployed dashboard's
+Europe section rendered a real 76% hydro+wind+solar share, populated regional-mix bars per
+bidding zone, and non-zero diurnal/volatility charts.
+
 ## 3. Why
 
 - A separate `live` group lets browser delivery move independently from idempotent persistence;
