@@ -17,8 +17,8 @@ const PROVENANCE: Record<Source, { dataset: string; url: string; cadence: string
   ENTSOE: {
     dataset: "ENTSO-E Transparency Platform — Actual Generation per Type (document type A75, process type A16)",
     url: "https://transparency.entsoe.eu",
-    cadence: "15–60 minute resolution depending on bidding zone/series",
-    note: "Norway's five bidding zones plus the Netherlands. Live verification is pending an issued API token — see docs/architecture.md §3.",
+    cadence: "15–60 minute resolution depending on bidding zone/series (live-confirmed PT15M for Norway)",
+    note: "Norway's five bidding zones plus the Netherlands.",
   },
   EIA: {
     dataset: "EIA Open Data API v2 — electricity/rto/fuel-type-data",

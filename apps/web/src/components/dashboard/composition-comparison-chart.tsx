@@ -5,7 +5,7 @@ import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { useFixedDateRange } from "@/hooks/use-fixed-date-range";
 import { useGenerationMix } from "@/hooks/use-generation-mix";
-import { ONS_ZONES } from "@/lib/zones";
+import { ENTSOE_ZONES, ONS_ZONES } from "@/lib/zones";
 
 const DAYS = 14;
 
@@ -32,27 +32,32 @@ function toPercentRow(country: string, rows: { metric: Metric; value: number }[]
 }
 
 /**
- * The full generation-type breakdown for Brazil (ONS) vs USA (EIA), each
- * source's own units summed and normalized to % of its own total before
- * comparing — never adding MWmed to MWh. This is a genuinely different,
- * richer claim than the single hydro+wind+solar share number in
- * use-generation-share.ts: it shows the *whole* composition, including
- * where each grid's non-renewable share actually comes from (US48 leans
- * heavily thermal/nuclear where Brazil leans hydro).
+ * The full generation-type breakdown for Brazil (ONS) vs USA (EIA) vs
+ * Europe (ENTSO-E), each source's own units summed and normalized to % of
+ * its own total before comparing — never adding MWmed to MAW/MWh. This is
+ * a genuinely different, richer claim than the single hydro+wind+solar
+ * share number in use-generation-share.ts: it shows the *whole*
+ * composition, including where each grid's non-renewable share actually
+ * comes from (US48 leans heavily thermal/nuclear, Brazil leans hydro,
+ * Norway+Netherlands leans hydro+wind).
  */
 export function CompositionComparisonChart({ visibleMetrics = METRIC_ORDER }: { visibleMetrics?: Metric[] }) {
   const { from, to } = useFixedDateRange(DAYS);
   const ons = useGenerationMix({ source: "ONS", zones: ONS_ZONES, from, to, bucket: "day" });
   const eia = useGenerationMix({ source: "EIA", zones: ["US-US48"], from, to, bucket: "day" });
+  const entsoe = useGenerationMix({ source: "ENTSOE", zones: ENTSOE_ZONES, from, to, bucket: "day" });
 
-  if (ons.isPending || eia.isPending) return <p className="text-paragraph-sm text-text-sub-600">Loading composition comparison…</p>;
-  if (ons.isError || eia.isError) {
+  if (ons.isPending || eia.isPending || entsoe.isPending) {
+    return <p className="text-paragraph-sm text-text-sub-600">Loading composition comparison…</p>;
+  }
+  if (ons.isError || eia.isError || entsoe.isError) {
     return <p className="text-paragraph-sm text-error-base">Composition comparison unavailable.</p>;
   }
 
   const rows: CountryRow[] = [];
   if (ons.data.rows.length > 0) rows.push(toPercentRow("Brazil (ONS)", ons.data.rows));
   if (eia.data.rows.length > 0) rows.push(toPercentRow("USA (EIA)", eia.data.rows));
+  if (entsoe.data.rows.length > 0) rows.push(toPercentRow("Europe (ENTSO-E)", entsoe.data.rows));
 
   if (rows.length === 0) return <p className="text-paragraph-sm text-text-soft-400">No verified readings yet</p>;
 

@@ -12,3 +12,12 @@ export const ONS_ZONES = zoneSchema.options.filter((zone): zone is Zone & `BR-${
  * it already contains.
  */
 export const USA_REGIONAL_ZONES: Zone[] = ["US-CISO", "US-ERCO", "US-ISNE", "US-MISO", "US-NYIS", "US-PJM", "US-SWPP"];
+
+/**
+ * ENTSO-E's six configured bidding zones (Norway's five plus the
+ * Netherlands' one — packages/contracts/src/event.ts). Unlike
+ * USA_REGIONAL_ZONES, ENTSO-E has no single national-aggregate zone code
+ * to exclude, so this list doubles as both "all of Europe" and the
+ * per-zone regional breakdown.
+ */
+export const ENTSOE_ZONES: Zone[] = ["NO-NO1", "NO-NO2", "NO-NO3", "NO-NO4", "NO-NO5", "NL"];

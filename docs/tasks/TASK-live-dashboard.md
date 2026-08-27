@@ -466,6 +466,44 @@ local stack rather than guessed at:
    Monroe) — large actively-operating plants report every period, so they're virtually always
    present in any recent sample even though the sample isn't capacity-sorted.
 
+### 2.10 Europe deep-dive (2026-08-27, user request, ENTSO-E now live)
+
+ENTSO-E's API token arrived and was live-verified (`docs/tasks/TASK-entsoe-eia-pollers.md` §5.3) —
+2,446 real readings across all six configured zones (`NO-NO1`–`NO-NO5`, `NL`). User asked for the
+same country deep-dive treatment Brazil and USA already got (§2.7/§2.8), now that there is real
+data to show.
+
+**Decided and built:**
+- `apps/web/src/lib/zones.ts`: new `ENTSOE_ZONES` export — all six configured ENTSO-E zones. Unlike
+  `USA_REGIONAL_ZONES` (which deliberately excludes the `US-US48` national aggregate zone code),
+  ENTSO-E has no such single aggregate zone, so `ENTSOE_ZONES` is used both for the "whole Europe"
+  mix chart and the per-zone regional breakdown — summing all six *is* the aggregate here.
+- New `EuropeSection` (`apps/web/src/components/dashboard/europe-section.tsx`), mirroring
+  `UsaSection`: current share number, `GenerationMixChart` (source `ENTSOE`, all six zones),
+  `RegionalMixChart` (per bidding zone), `DiurnalPatternChart`, `VolatilityChart`. Every one of
+  these chart components was already generic over `source`/`zones` (built that way for the USA
+  section in §2.7), so no chart-component changes were needed — only the new section composing
+  them, wired into `DashboardShell` after `UsaSection`.
+- **No plant map or leaderboard for Europe** — deliberately, not an oversight: `GET /plants` only
+  supports `ANEEL_SIGA` (Brazil) and `EIA_860` (USA) registries (§2.7); there is no equivalent
+  ENTSO-E/Norway plant-capacity registry wired into this pipeline, and ENTSO-E's generation-per-type
+  readings carry no per-plant `asset_id` either (same reason EIA has no live-output leaderboard,
+  §2.9 point 3). Adding one would mean inventing a data source that isn't verified — against this
+  project's hard constraint. Left deferred, same posture as ONS's reservoir/CMO data and ENTSO-E's
+  load/cross-border-flow document types (§2.7's explicitly-deferred list).
+- `CompositionComparisonChart` widened from Brazil-vs-USA to Brazil-vs-USA-vs-Europe (one more
+  `useGenerationMix` call, `source: "ENTSOE"`, `zones: ENTSOE_ZONES`) — same per-source
+  percent-of-own-total normalization already used for the other two, never summing MAW into MWmed
+  or MWh.
+- `CountryComparisonSection` and `DataProvenance`'s stale "until ENTSO-E is live" /
+  "pending an issued API token" copy updated to reflect live status — no functional change, those
+  panels were already generic over `source` and needed no gating logic to begin with (a query that
+  returns zero rows already renders "No verified readings yet"; now it returns real rows instead).
+
+No new API routes or contract changes — every endpoint `EuropeSection` uses (`/generation-mix`,
+`/generation-share`) already accepted `ENTSOE` as a valid `source` (§2.7's schema widening), it
+simply returned empty rows until today.
+
 ## 3. Why
 
 - A separate `live` group lets browser delivery move independently from idempotent persistence;

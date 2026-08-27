@@ -4,6 +4,7 @@ import type { Metric } from "@renewable-pulse/contracts";
 import { useState } from "react";
 import { BrazilSection } from "@/components/dashboard/brazil-section";
 import { CountryComparisonSection } from "@/components/dashboard/country-comparison-section";
+import { EuropeSection } from "@/components/dashboard/europe-section";
 import { ALL_METRICS, MetricFilterControl } from "@/components/dashboard/metric-filter-control";
 import { PipelineHealthSection } from "@/components/dashboard/pipeline-health-section";
 import { PipelineTransparencySection } from "@/components/dashboard/pipeline-transparency-section";
@@ -29,6 +30,7 @@ export function DashboardShell() {
       <MetricFilterControl visible={visibleMetrics} onToggle={toggleMetric} />
       <BrazilSection visibleMetrics={visibleMetrics} />
       <UsaSection visibleMetrics={visibleMetrics} />
+      <EuropeSection visibleMetrics={visibleMetrics} />
       <PlantMapSection />
       <CountryComparisonSection visibleMetrics={visibleMetrics} />
       <PipelineHealthSection />

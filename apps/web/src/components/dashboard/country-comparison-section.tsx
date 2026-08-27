@@ -5,11 +5,11 @@ import { CompositionComparisonChart } from "@/components/dashboard/composition-c
 import { GENERATION_SHARE_LABEL, useGenerationShare } from "@/hooks/use-generation-share";
 import { useFixedDateRange } from "@/hooks/use-fixed-date-range";
 
-// GET /generation-share is scoped per source, not per zone, so this panel
-// is genuinely "Europe" once ENTSO-E is live: Norway's five bidding zones
-// and the Netherlands' one zone (packages/contracts/src/event.ts) both feed
-// the same ENTSOE source bucket in MAW. Splitting this into per-country
-// panels would need a zone-scoped share endpoint, which doesn't exist yet.
+// GET /generation-share is scoped per source, not per zone, so this panel's
+// "Europe" card combines both countries: Norway's five bidding zones and
+// the Netherlands' one zone (packages/contracts/src/event.ts) both feed the
+// same ENTSOE source bucket in MAW. Splitting this into per-country panels
+// would need a zone-scoped share endpoint, which doesn't exist yet.
 const COUNTRIES: { source: Source; country: string; grid: string }[] = [
   { source: "ONS", country: "Brazil", grid: "ONS" },
   { source: "ENTSOE", country: "Europe (Norway + Netherlands)", grid: "ENTSO-E" },
@@ -49,8 +49,8 @@ function CountryCard({ country, grid, row }: { country: string; grid: string; ro
 /**
  * Three small multiples, not one combined chart (docs/brand.md §4): each
  * panel is source-scoped, so a Brazil/ONS MWmed share is never added to a
- * Norway/ENTSO-E MAW share. Until ENTSO-E is live-verified, its panel
- * renders "No verified readings yet" rather than a placeholder series
+ * Norway/ENTSO-E MAW share. A source with no rows in the window renders
+ * "No verified readings yet" rather than a placeholder series
  * (docs/tasks/TASK-live-dashboard.md §2.5.2).
  */
 export function CountryComparisonSection({ visibleMetrics }: { visibleMetrics: Metric[] }) {
