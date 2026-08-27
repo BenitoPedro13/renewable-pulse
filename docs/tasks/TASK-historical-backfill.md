@@ -120,24 +120,34 @@ generic HTTP retry framework for this.
 ### 2.2 Per-provider chunking and rate limits
 
 - **ONS** — chunk = 1 calendar month, the natural unit `FetchMonth(ctx, year, month)` already
-  takes. It's a static S3 file GET, not a metered API — no documented rate limit found
-  (`[VERIFY]`); treat conservatively regardless: strictly sequential, one month at a time, no
-  fan-out, with the operator-tunable inter-month delay.
-- **ENTSO-E** — loop per configured zone (`entsoe/client.go:31-38`'s five/six Norwegian bidding
-  zones), backward from live coverage to 2015-01. Default chunk = 1 week; `[VERIFY]` the exact
-  maximum time span the A75 document type accepts per request against ENTSO-E's own API docs
-  before running at scale — do not assume 1 week is safe without checking. `[VERIFY]` ENTSO-E's
-  fair-use rate limit — not recorded anywhere in this repo's research to date.
+  takes. It's a static S3 file GET, not a metered API — no documented rate limit found. Treat
+  conservatively regardless: strictly sequential, one month at a time, no fan-out, with the
+  operator-tunable inter-month delay (default 2s, `onsDefaultBackfillDelay`).
+- **ENTSO-E** — loop per configured zone (`entsoe/client.go:31-38`'s six zones), backward from
+  live coverage to 2015-01. **Resolved (web research, 2026-08-27):** most ENTSO-E Transparency
+  Platform endpoints, A75 included, cap `periodStart`/`periodEnd` at a maximum one-year span per
+  request. Chunk width was widened from the originally-planned 1 week to **30 days**
+  (`entsoeBackfillChunk`) — still a wide safety margin under the 1-year cap, and a ~4x reduction
+  in request count over the 11-year Europe run. **Resolved:** the platform enforces a **400
+  requests/minute per API token** cap; sustained client-side throttling well under that (roughly
+  6–7 req/s average) is the documented fair-use expectation. Default inter-chunk delay is 1s
+  (`entsoeDefaultBackfillDelay`), comfortably under both figures — six zones × ~11 years of
+  30-day chunks is under 900 total requests.
 - **EIA** — chunk = 30 days (the live poller already proved a 5-day/single-respondent window
   returns 1728 rows, comfortably under the 5000-row page cap per
   `docs/tasks/TASK-entsoe-eia-pollers.md §5.1`; 30 days across all 8 respondents is a reasoned
   widening, still paginated internally by `FetchFuelTypeData`), backward from live coverage to
-  2018-07. `[VERIFY]` EIA v2's documented numeric rate limit before running at scale.
+  2018-07. **Unresolved:** no documented numeric rate limit was found for EIA v2 in this research
+  pass (EIA's own `documentation.php` and `terms-of-service.php` don't state one). Default
+  inter-chunk delay is 2s (`eiaDefaultBackfillDelay`) as a conservative placeholder — watch
+  `/pipeline-health` and EIA response codes during the pilot run (§2.3) for throttling signals
+  before scaling up.
 
-None of the three providers' exact rate limits are documented anywhere in this repository today.
-Do not invent numbers to fill this gap — ship with a conservative default delay and treat the
-first pilot run (§2.3) as the place to observe real-world throttling behavior, tightening or
-relaxing the delay from there.
+Rate-limit delays are operator-tunable via `--backfill-rate-limit-delay`, overriding the
+per-provider defaults above (`main.go`'s `onsDefaultBackfillDelay` / `entsoeDefaultBackfillDelay`
+/ `eiaDefaultBackfillDelay`). Do not invent numbers to fill the remaining EIA gap — ship with the
+conservative default and treat the first pilot run (§2.3) as the place to observe real-world
+throttling behavior, tightening or relaxing the delay from there.
 
 ### 2.3 Zone/respondent-enum risk — verify before full-depth runs
 
@@ -175,6 +185,33 @@ can produce ambiguous or incorrect UTC timestamps. **Resolve this `[VERIFY]` bef
 ONS backfill specifically** — conveniently, ONS is sequenced last (§2.6), so this is a real
 blocking prerequisite, not a parallel nice-to-have.
 
+**Implemented (2026-08-27):** `time.ParseInLocation` against `America/Sao_Paulo`'s embedded IANA
+tzdata already applies the historically-correct DST offset for the overwhelming majority of
+timestamps — it is not the naive fixed-offset parse this section originally worried about. The one
+real gap is the local calendar's two DST transition edges:
+
+- **Spring-forward** (Brazil's clocks jumped forward, e.g. 2018-11-03 23:59:59 → 2018-11-04
+  01:00:00): the wall-clock values in the skipped hour never existed. `time.ParseInLocation`
+  silently normalizes them forward instead of erroring — verified live against Go's embedded
+  tzdata by scanning 2000–2019 for every such gap (e.g. confirmed `2018-11-04 00:00:00` is one).
+  **Fixed:** `ons/normalize.go`'s new `parseDinInstante` round-trips the parsed time back through
+  the same layout string; a skipped time won't format back to its own input, so it's now rejected
+  with an error (caught by the existing skip-and-log/DLQ posture, not silently mis-recorded) —
+  see `TestNormalize_DSTSpringForwardGapErrors`.
+- **Fall-back** (clocks repeated an hour): this is a genuine ambiguity, not an invalid time, and
+  Go's stdlib exposes no way to detect it. This remains a small, **documented residual risk** — at
+  most ~1 hour/year, only for years with DST (i.e. before 2019) — rather than a blocking gap: the
+  alternative (guessing which of the two occurrences is correct) would silently fabricate
+  certainty ONS's own data doesn't provide, which the project's "no synthetic data" posture argues
+  against more than an occasional, logged skip does.
+
+This is a best-effort resolution from static analysis and Go's own tzdata, not the live
+comparison against ONS's real-time dashboard the original `[VERIFY]` called for — that comparison
+still hasn't been done and would be the way to confirm ONS's own recording convention actually
+matches standard Brazilian civil time (as opposed to, say, a fixed offset ONS applies regardless
+of the calendar's DST rule for that date). Do that comparison before the ONS backfill's full run,
+per §2.3's pilot-chunk step.
+
 ### 2.5 `generation_hourly` continuous-aggregate refresh gap
 
 `apps/consumer/migrations/0002_generation_hourly.sql`'s continuous aggregate refresh policy
@@ -200,16 +237,45 @@ for that batch — not as one `NULL, NULL` call over decades of data at the very
 TimescaleDB documents as slow and lock-heavy at that scale. Document as an operator runbook step
 (a `railway ssh --service timescaledb -- psql ...` command pattern), not a new script file.
 
-### 2.6 Compression policy (new migration)
+### 2.6 Compression policy — deliberately NOT an auto-applied migration
 
 No compression policy or retention policy exists anywhere in this repository today — confirmed by
 a repo-wide grep. Decades of dense hourly data (order-of-magnitude estimate for ONS alone: ~25
 years × 8760 hours × 200+ plants ≈ tens of millions of rows) will otherwise accumulate
-uncompressed indefinitely.
+uncompressed indefinitely, so this is still real, needed work — but **not as a checked-in
+migration file**, for a reason discovered during implementation, not anticipated when this section
+was first drafted.
 
-Add `apps/consumer/migrations/0003_readings_compression.sql`, following this repo's existing
-no-framework, filename-ordered migration convention (`apps/consumer/src/db.ts:21-27` applies
-`.sql` files in filename order):
+**Resolved (web research, 2026-08-27), and it changes the plan:** the `[VERIFY]` this section
+originally deferred — `INSERT ... ON CONFLICT` behavior against compressed hypertable chunks — is
+a **known, still-open TimescaleDB limitation**, not a settled, checkable fact with a safe answer.
+Multiple open TimescaleDB GitHub issues (as of this research pass) confirm `ON CONFLICT` does not
+reliably work against compressed chunks: a batched `INSERT ... ON CONFLICT DO NOTHING` can exit
+prematurely on the first conflict instead of continuing through the remaining rows, `ON CONFLICT`
+is documented as unsupported on compressed chunks generally, and upserts into compressed chunks
+are separately reported as slow. `apps/consumer`'s idempotent write path (docs/architecture.md
+§4) *is* an upsert on this exact unique index — this is not a hypothetical edge case, it is the
+project's core correctness guarantee for exactly the write pattern a backfill (and any subsequent
+live-poll overlap or resumed chunk) depends on.
+
+This invalidates the original mitigation. A 90-day `compress_after` buffer only protects **live
+polling's own lookback windows** (ENTSO-E: 2h; EIA: 5 days; ONS: whole-month re-fetch) — it does
+nothing for a **backfill**, whose whole purpose is inserting rows with `recorded_at` values that
+are already years old the moment they're written. If `apps/consumer/migrations/`'s unconditional,
+apply-on-every-startup migration runner (`db.ts:21-27`) shipped this policy today, TimescaleDB's
+background compression job would start compressing 2000-era ONS chunks within its own schedule —
+independent of, and likely faster than, a multi-day backfill run — hitting the broken-`ON
+CONFLICT` path on the very rows a resumed or replayed backfill chunk needs to upsert safely.
+
+**Revised decision:** do not add `apps/consumer/migrations/0003_readings_compression.sql`. Since
+this repo's migration runner has no gating mechanism (no flags, no manual-apply marker — every
+`.sql` file present applies unconditionally on next deploy, `db.ts:21-27`), the only way to honor
+this section's own original sequencing rule ("enable this policy only after each provider's older
+ranges are substantially backfilled") is to keep the SQL out of the auto-applied `migrations/`
+directory entirely until that's actually true — the same reasoning §2.5 already applied to
+`refresh_continuous_aggregate` ("document as an operator runbook step... not a new script file").
+Run this by hand, per provider, only after that provider's full-depth backfill is confirmed
+complete and stable:
 
 ```sql
 ALTER TABLE readings SET (
@@ -221,20 +287,25 @@ ALTER TABLE readings SET (
 SELECT add_compression_policy('readings', INTERVAL '90 days', if_not_exists => TRUE);
 ```
 
-- `compress_segmentby = 'source, zone, metric'` deliberately mirrors both the idempotency key's
-  non-time columns (`0001_readings.sql`) and `generation_hourly`'s own `GROUP BY`
-  (`0002_generation_hourly.sql`), so compression aligns with existing query patterns rather than
-  fighting them.
-- `compress_after => 90 days` is chosen wider than every live poller's lookback (ENTSO-E: 2h; EIA:
-  5 days; ONS: whole-month re-fetch) so that an idempotent replay write from live polling never
-  lands on an already-compressed chunk. `[VERIFY]` the exact `INSERT ... ON CONFLICT` behavior
-  against compressed hypertable chunks on the specific TimescaleDB/PG17 version in use — behavior
-  here has evolved across TimescaleDB releases; the 90-day buffer is a deliberate mitigation
-  regardless of the answer, not a substitute for checking it.
-- **Sequencing:** enable this policy only after each provider's older ranges are substantially
-  backfilled, so bulk backfill writes are never racing a compression job over the same chunks.
-- **No retention policy.** Explicitly out of scope — the entire point of this task is to acquire
-  decades of history for future analytics; an auto-delete retention policy would directly
+(via `railway ssh --service timescaledb -- psql "$DATABASE_URL" -c "..."`, the same command
+pattern as §2.7's backfill-execution note). `compress_segmentby = 'source, zone, metric'`
+deliberately mirrors both the idempotency key's non-time columns (`0001_readings.sql`) and
+`generation_hourly`'s own `GROUP BY` (`0002_generation_hourly.sql`). Once every targeted provider's
+backfill is done and no further replays/resumes are expected against pre-90-day-old data, the
+policy's ongoing behavior for *live* polling's narrow lookback windows is safe by the original
+90-day-buffer reasoning — the risk this section now flags is specific to compressing chunks a
+backfill (or its resume/replay) might still need to write into, not to running the policy at all,
+forever.
+
+**Promoting this to a real migration file later:** once all three providers' backfills are
+complete and this has been confirmed safe in practice, moving this SQL into
+`apps/consumer/migrations/0003_readings_compression.sql` becomes reasonable — at that point there
+are no more upserts landing on years-old chunks, so the `ON CONFLICT` limitation above no longer
+applies to any write this system makes. That migration is a candidate follow-up task, not part of
+this one.
+
+- **No retention policy.** Still explicitly out of scope — the entire point of this task is to
+  acquire decades of history for future analytics; an auto-delete retention policy would directly
   contradict that goal and should not be added as a reflex companion to compression.
 
 ### 2.7 Sequencing and operational notes
@@ -255,9 +326,21 @@ SELECT add_compression_policy('readings', INTERVAL '90 days', if_not_exists => T
 **Where backfill runs:** Redpanda has no public listener — `.railway/railway.ts:38-39` advertises
 only `redpanda.railway.internal:9092`. A backfill process must run inside Railway's private
 network via `railway ssh --service ingest -- ...`, not from a local machine pointed at a public
-broker address. `[VERIFY]` the exact `railway ssh`-passes-alternate-args CLI semantics before
-relying on it — `docs/tasks/TASK-railway-deploy.md §5.1` already documents multiple Railway CLI
-surprises found only by trying them live, so budget for the same here.
+broker address. **Resolved (web research, 2026-08-27):** `railway ssh --service <name> -- <command
+and args>` runs a one-off, non-interactive command against that service — PTY allocation is
+auto-detected off when stdin/stdout are piped, so output stays script-clean, matching what a
+long-running backfill process needs. Concrete pattern for the ENTSO-E pilot run (§2.3):
+
+```
+railway ssh --service ingest -- ./ingest \
+  --backfill=entsoe \
+  --backfill-from=2015-01-05 \
+  --backfill-to=2026-07-01
+```
+
+`docs/tasks/TASK-railway-deploy.md §5.1` already documents multiple Railway CLI surprises found
+only by trying them live — treat this pattern as verified-on-paper, not verified-in-production,
+until it's actually run once against the real `ingest` service.
 
 **Volume/backpressure:** the `redpanda-volume` is provisioned at 5000MB
 (`.railway/railway.ts:12`) — a real capacity constraint if a backfill produces messages faster
@@ -267,10 +350,14 @@ running each provider's chunks at full speed.
 
 **Resumability:** deliberately *not* a new checkpoint file or a new Postgres-read dependency in
 `apps/ingest` (it currently has none — it only talks to Redpanda, via
-`apps/ingest/internal/publish/redpanda.go`). Correctness across restarts is already guaranteed by
-the existing idempotency index — replaying any already-completed chunk is always safe. Efficiency
-is handled by logging one structured line per completed chunk (mirroring the existing
-`log.Printf("ingest: ons: poll complete: published=%d skipped=%d")` pattern, `main.go:139`), with
+`apps/ingest/internal/publish/redpanda.go`). Correctness across restarts is guaranteed by the
+existing idempotency index **as long as the chunk being replayed isn't sitting on a compressed
+hypertable chunk** — which is exactly why §2.6 now insists compression stays unapplied until
+backfill is done, rather than relying on a time-based buffer alone. With that precondition held,
+replaying any already-completed chunk is always safe. Efficiency is handled by logging one
+structured line per completed chunk (mirroring the existing `log.Printf("ingest: ons: poll
+complete: published=%d skipped=%d")` pattern, now also emitted per backfill chunk — see
+`fetchAndPublishONSMonth`/`backfillONS`/`backfillEntsoe`/`backfillEIA` in `main.go`), with
 `--backfill-resume-from` set from the last logged chunk boundary on restart. Worst case on
 imperfect resume bookkeeping: some redundant re-fetch/re-publish work, never duplication or
 corruption.
@@ -294,35 +381,64 @@ piece of the whole roadmap to build first, and the honest prerequisite for every
 
 ## 4. Affected files
 
-- `apps/ingest/main.go` — new `--backfill*` flags, extracted per-window helper functions, backfill
-  driver loop (newest→oldest, retry/backoff, resume logging).
-- `apps/ingest/internal/ons/client.go` — no interface change (`FetchMonth` already fits); retry/
-  backoff wrapper added around its HTTP call.
-- `apps/ingest/internal/ons/normalize.go` — DST-aware datetime parsing fix (§2.4), resolving the
-  existing `[VERIFY]` at `normalize.go:14-19`.
+- `apps/ingest/main.go` — new `--backfill*` flags (`--backfill`, `--backfill-from`,
+  `--backfill-to`, `--backfill-resume-from`, `--backfill-rate-limit-delay`); extracted
+  `fetchAndPublishONSMonth`/`fetchAndPublishEntsoeWindow`/`fetchAndPublishEIAWindow` helpers shared
+  by live polling and backfill; `runBackfill` dispatcher and per-provider
+  `backfillONS`/`backfillEntsoe`/`backfillEIA` driver loops (newest→oldest, resume logging).
+  **Implemented 2026-08-27.**
+- `apps/ingest/internal/ons/client.go` — no interface change (`FetchMonth` already fits); added
+  `doWithRetry` wrapping the HTTP call with 3-attempt exponential backoff. **Implemented.**
+- `apps/ingest/internal/ons/normalize.go` — DST spring-forward-gap detection (§2.4), resolving the
+  existing `[VERIFY]` at `normalize.go:14-19` as far as static analysis can (a live comparison
+  against ONS's own dashboard remains a pre-full-run step, not a code change). **Implemented.**
 - `apps/ingest/internal/entsoe/client.go` — no interface change (`FetchActualGeneration` already
-  fits); retry/backoff wrapper.
+  fits); added its own `doWithRetry`. **Implemented.**
 - `apps/ingest/internal/eia/client.go` — no interface change (`FetchFuelTypeData` already fits);
-  retry/backoff wrapper.
-- `apps/consumer/migrations/0003_readings_compression.sql` (new) — compression policy per §2.6.
-- `packages/contracts/src/event.ts` and `apps/ingest/internal/event/event.go` — only touched if
-  the §2.3 zone-enum pilot surfaces codes not already in `zoneSchema`.
+  added its own `doWithRetry`. **Implemented.**
+- `apps/consumer/migrations/0003_readings_compression.sql` — **deliberately NOT added**; see §2.6's
+  revised decision. The compression SQL is documented as an operator runbook command instead, to
+  be run manually per provider after that provider's backfill is complete.
+- `packages/contracts/src/event.ts` and `apps/ingest/internal/event/event.go` — untouched; no
+  zone-enum pilot has surfaced an unmapped code yet (§2.3's pilot step is still an operator
+  verification step ahead of a full-depth run, not something this pass could exercise without
+  hitting the live APIs).
+- Tests added: `apps/ingest/main_test.go` (ISO date parsing, rate-limit-delay override, backfill
+  dispatch error paths, `backfillONS`'s chunk-boundary/error-propagation logic via a swappable
+  `fetchAndPublishONSMonthFn` seam — mirroring `eia/client_test.go`'s `baseURL` swap pattern);
+  `apps/ingest/internal/ons/normalize_test.go` (`TestNormalize_DSTSpringForwardGapErrors`, using a
+  real gap date verified against Go's embedded tzdata: 2018-11-04 00:00:00).
 
 ## 5. Verification
 
-Before this task is considered implementable, resolve the `[VERIFY]` items above:
+`[VERIFY]` items, resolved during implementation (2026-08-27, web research — see inline citations
+in §2.2/§2.4/§2.6 above for what was found and how it changed the plan):
 
-- ENTSO-E's maximum request time span for document type A75 (§2.2).
-- All three providers' actual rate limits, or confirmation that none apply to reasonable
-  conservative pacing (§2.2).
-- `railway ssh`'s exact CLI semantics for running a one-off backfill process against the `ingest`
-  service (§2.7).
-- TimescaleDB/PG17's `INSERT ... ON CONFLICT` behavior against compressed chunks (§2.6).
+- ENTSO-E's maximum request time span for document type A75 — **resolved**: ~1 year; chunk width
+  set to 30 days, well under that.
+- ENTSO-E's rate limit — **resolved**: 400 req/min per token; default delay set to 1s/chunk.
+- EIA's rate limit — **not found**; shipped with a conservative 2s/chunk default instead of a
+  confirmed number (§2.2).
+- TimescaleDB `INSERT ... ON CONFLICT` behavior against compressed chunks — **resolved, and it's
+  bad news**: a known, still-open limitation. This changed §2.6's plan from "ship a migration with
+  a safety-buffer `compress_after`" to "don't auto-apply the policy until backfill is done," not
+  just a note-taking exercise.
+- `railway ssh`'s CLI semantics — **resolved**: `railway ssh --service <name> -- <command> <args>`
+  runs a one-off, non-interactive command against that service (PTY is auto-detected off when
+  piped, keeping output script-clean). Confirms the pattern in §2.7's runbook note.
 
-Once implemented, verify per §2.7's sequencing: a pilot chunk + DLQ inspection per provider before
-any full-depth run; `/pipeline-health` consumer lag watched live during each run; confirm
-`generation_hourly` reflects each backfilled range only after its corresponding manual
-`refresh_continuous_aggregate` call, not before.
+Still open, deliberately left as operator/runtime verification rather than something resolvable by
+further static research:
+
+- A live comparison of `din_instante` against ONS's own real-time dashboard, to confirm its
+  recording convention actually matches standard Brazilian civil time (§2.4) — do this before the
+  ONS backfill's full run, not before its code ships.
+- §2.3's pilot-chunk + DLQ-inspection step, for ONS and EIA, before any full-depth run.
+- Watch `/pipeline-health` consumer lag live during each run; confirm `generation_hourly` reflects
+  each backfilled range only after its corresponding manual `refresh_continuous_aggregate` call
+  (§2.5), not before.
+- Run the §2.6 compression SQL by hand, per provider, only once that provider's backfill is
+  confirmed complete — not bundled into this task's code changes.
 
 This task does not include actually executing a full-depth backfill against production — that is
 a deliberate, monitored operator action taken after this design is implemented and reviewed, not

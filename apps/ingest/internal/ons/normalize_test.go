@@ -86,6 +86,25 @@ func TestNormalize_UnmappedGenerationTypeErrors(t *testing.T) {
 	}
 }
 
+// TestNormalize_DSTSpringForwardGapErrors confirms a din_instante value that
+// falls in a real DST spring-forward gap (2018-11-04 00:00:00 in
+// America/Sao_Paulo — Brazil's clocks jumped from 23:59:59 on 2018-11-03
+// straight to 01:00:00 — verified against Go's embedded tzdata) is rejected
+// rather than silently normalized to a wrong hour, per §2.4's residual DST
+// risk ahead of the pre-2019 ONS backfill.
+func TestNormalize_DSTSpringForwardGapErrors(t *testing.T) {
+	row := Row{
+		DinInstante: "2018-11-04 00:00:00",
+		IDSubsist:   "N",
+		NomTipoUsi:  "HIDROELÉTRICA",
+		IDONS:       "X",
+		ValGeracao:  "1.0",
+	}
+	if _, err := Normalize(row, ingestedAt); err == nil {
+		t.Fatal("want error for a din_instante in a DST spring-forward gap, got nil")
+	}
+}
+
 func TestNormalize_EmptyValGeracaoErrors(t *testing.T) {
 	row := Row{
 		DinInstante: "2026-08-01 00:00:00",

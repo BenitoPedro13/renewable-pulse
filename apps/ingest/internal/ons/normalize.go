@@ -37,6 +37,31 @@ var metricByTipoUsina = map[string]string{
 
 const dinInstanteLayout = "2006-01-02 15:04:05"
 
+// parseDinInstante parses value as local civil time in Location. Location is
+// loaded from the embedded IANA tzdata, so time.ParseInLocation already
+// applies the correct historical DST offset for the vast majority of hours —
+// this is not the naive fixed-offset parse docs/tasks/TASK-historical-
+// backfill.md §2.4 originally worried about. The one gap Go's stdlib leaves
+// open is the local calendar's two DST transition edges: a spring-forward
+// transition skips an hour entirely (that wall-clock value never really
+// existed), which ParseInLocation silently normalizes forward instead of
+// erroring. Catch that by round-tripping the parsed time back through the
+// same layout: a skipped time won't format back to its own input. A
+// fall-back transition instead repeats an hour (it's genuinely ambiguous,
+// not invalid) — Go's stdlib has no way to detect this case, so it remains
+// a small, documented residual risk (at most ~1 hour/year, and only for
+// years with DST, i.e. before Brazil abolished it in 2019).
+func parseDinInstante(value string) (time.Time, error) {
+	t, err := time.ParseInLocation(dinInstanteLayout, value, Location)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if t.Format(dinInstanteLayout) != value {
+		return time.Time{}, fmt.Errorf("din_instante %q falls in a DST spring-forward gap", value)
+	}
+	return t, nil
+}
+
 // Normalize maps one ONS CSV row to the canonical reading event. It returns
 // an error for rows this poller doesn't yet know how to handle (unmapped
 // generation type, unparseable value) rather than guessing — callers should
@@ -56,7 +81,7 @@ func Normalize(row Row, ingestedAt time.Time) (event.Reading, error) {
 		return event.Reading{}, fmt.Errorf("ons: parsing val_geracao %q: %w", row.ValGeracao, err)
 	}
 
-	recordedAt, err := time.ParseInLocation(dinInstanteLayout, row.DinInstante, Location)
+	recordedAt, err := parseDinInstante(row.DinInstante)
 	if err != nil {
 		return event.Reading{}, fmt.Errorf("ons: parsing din_instante %q: %w", row.DinInstante, err)
 	}

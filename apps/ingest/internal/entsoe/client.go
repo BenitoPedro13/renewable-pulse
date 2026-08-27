@@ -39,6 +39,15 @@ var Zones = []Zone{
 
 const periodLayout = "200601021504"
 
+// fetchRetryAttempts/fetchRetryDelay bound retrying a failed request. A live
+// poll can just wait for next hour's tick on failure, but a backfill's
+// hundreds of sequential per-zone requests can't
+// (docs/tasks/TASK-historical-backfill.md §2.1).
+const (
+	fetchRetryAttempts = 3
+	fetchRetryDelay    = 5 * time.Second
+)
+
 // FetchActualGeneration fetches document type A75 (Actual generation per
 // type), process type A16 (Realised), for one EIC area code over
 // [start, end).
@@ -58,7 +67,7 @@ func FetchActualGeneration(ctx context.Context, token, eicArea string, start, en
 		return nil, fmt.Errorf("entsoe: building request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := doWithRetry(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("entsoe: fetching %s: %w", eicArea, err)
 	}
@@ -82,4 +91,28 @@ func FetchActualGeneration(ctx context.Context, token, eicArea string, start, en
 		return nil, fmt.Errorf("entsoe: parsing response for %s: %w", eicArea, err)
 	}
 	return &doc, nil
+}
+
+// doWithRetry performs req, retrying up to fetchRetryAttempts times with
+// exponential backoff on transport-level failure.
+func doWithRetry(ctx context.Context, req *http.Request) (*http.Response, error) {
+	delay := fetchRetryDelay
+	var err error
+	for attempt := 1; attempt <= fetchRetryAttempts; attempt++ {
+		var resp *http.Response
+		resp, err = http.DefaultClient.Do(req)
+		if err == nil {
+			return resp, nil
+		}
+		if attempt == fetchRetryAttempts {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+		}
+		delay *= 2
+	}
+	return nil, err
 }

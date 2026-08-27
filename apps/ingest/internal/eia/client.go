@@ -38,6 +38,15 @@ const maxPageLength = 5000
 
 const periodLayout = "2006-01-02T15"
 
+// fetchRetryAttempts/fetchRetryDelay bound retrying a failed request. A live
+// poll can just wait for next hour's tick on failure, but a backfill's many
+// sequential paginated requests can't
+// (docs/tasks/TASK-historical-backfill.md §2.1).
+const (
+	fetchRetryAttempts = 3
+	fetchRetryDelay    = 3 * time.Second
+)
+
 type apiResponse struct {
 	Response struct {
 		Total string    `json:"total"`
@@ -97,7 +106,7 @@ func fetchPage(ctx context.Context, apiKey string, start, end time.Time, offset 
 		return nil, 0, fmt.Errorf("eia: building request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := doWithRetry(ctx, req)
 	if err != nil {
 		return nil, 0, fmt.Errorf("eia: fetching fuel-type-data: %w", err)
 	}
@@ -120,4 +129,28 @@ func fetchPage(ctx context.Context, apiKey string, start, end time.Time, offset 
 		return nil, 0, fmt.Errorf("eia: parsing response.total %q: %w", parsed.Response.Total, err)
 	}
 	return parsed.Response.Data, total, nil
+}
+
+// doWithRetry performs req, retrying up to fetchRetryAttempts times with
+// exponential backoff on transport-level failure.
+func doWithRetry(ctx context.Context, req *http.Request) (*http.Response, error) {
+	delay := fetchRetryDelay
+	var err error
+	for attempt := 1; attempt <= fetchRetryAttempts; attempt++ {
+		var resp *http.Response
+		resp, err = http.DefaultClient.Do(req)
+		if err == nil {
+			return resp, nil
+		}
+		if attempt == fetchRetryAttempts {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+		}
+		delay *= 2
+	}
+	return nil, err
 }

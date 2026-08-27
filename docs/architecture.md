@@ -323,6 +323,17 @@ without failing" framing. All four are built as of Phase 2
    depth/lag arithmetic is unit-tested (`apps/api/src/lib/kafka-health.spec.ts`); the admin
    client's own I/O against a real broker is verified manually rather than in the automated
    suite — see `docs/tasks/TASK-reliability-layer.md` §6 for why.
+5. **Historical backfill** — `apps/ingest`'s `--backfill=ons|entsoe|eia` mode reuses the exact
+   same fetch → normalize → publish path as live polling (no second, direct-to-Postgres bulk
+   loader), walking each provider newest→oldest in provider-sized chunks with a 3-attempt
+   exponential-backoff retry around each HTTP call and an operator-tunable inter-chunk delay.
+   Resumability after a restart relies entirely on the same idempotency index as live polling —
+   no separate checkpoint store — with one caveat: a compression policy (not yet enabled, see
+   `docs/tasks/TASK-historical-backfill.md` §2.6) must stay disabled until a provider's backfill
+   is complete, since `INSERT ... ON CONFLICT` is a known-unreliable operation against compressed
+   TimescaleDB chunks. See `docs/tasks/TASK-historical-backfill.md` for the full design, the
+   per-provider chunk sizes/rate limits, and the ONS-specific DST-parsing fix required before its
+   backfill.
 
 ## 6. Stack
 

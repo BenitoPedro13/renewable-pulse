@@ -21,6 +21,7 @@ running against real data on Railway.**
 | 3 — ENTSO-E (Norway) + EIA (USA) pollers | ✅ Live-verified — 2,446 real readings across 6 ENTSO-E zones + EIA US48 |
 | 4 — Live dashboard | ✅ Live-verified — Brazil/USA deep-dives, a Brazil/USA plant-map toggle (ANEEL SIGA + EIA-860), per-plant and per-capacity leaderboards, USA regional (7-RTO) generation mix, volatility charts, a cross-chart metric filter, pipeline-health panel, live WebSocket indicator |
 | 5 — Railway deployment | ✅ Live-verified — see Deployment below (`docs/tasks/TASK-railway-deploy.md`) |
+| 6 — Historical backfill (`--backfill=ons\|entsoe\|eia`) | 🛠️ Code shipped and unit-tested (`docs/tasks/TASK-historical-backfill.md`); not yet run against production — a deliberate, monitored operator action, not an automatic consequence of merging the code |
 
 Nothing here is faked to look more finished than it is: if a source has no verified data, the
 dashboard is expected to show it as missing rather than substitute a placeholder.
@@ -117,6 +118,12 @@ cd apps/web && pnpm dev   # localhost:3000
 # 7. inspect or replay anything that landed in the DLQ
 cd ../consumer && pnpm dlq -- list
 pnpm dlq -- replay
+
+# 8. (optional) run a historical backfill instead of live polling — see
+# docs/tasks/TASK-historical-backfill.md before running this against
+# production; it must run inside Railway's private network (railway ssh),
+# not from a local machine pointed at a public broker address
+cd apps/ingest && go run . --backfill=entsoe --backfill-from=2015-01-05 --backfill-to=2026-07-01
 ```
 
 `docker exec renewable-pulse-timescaledb psql -U renewable_pulse -d renewable_pulse -c "SELECT count(*) FROM readings;"`
