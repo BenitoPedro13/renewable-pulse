@@ -18,7 +18,7 @@ running against real data on Railway.**
 |---|---|
 | 1 — ONS spine (Go → Redpanda → TimescaleDB → API) | ✅ Live-verified: 366,336 real plant/hour readings ingested, zero duplicates on replay |
 | 2 — Reliability (DLQ, backpressure, pipeline health) | ✅ Live-verified |
-| 3 — ENTSO-E (Norway) + EIA (USA) pollers | ✅ EIA live-verified. ENTSO-E implemented and unit-tested; live verification pending an API token |
+| 3 — ENTSO-E (Norway) + EIA (USA) pollers | ✅ Live-verified — 2,446 real readings across 6 ENTSO-E zones + EIA US48 |
 | 4 — Live dashboard | ✅ Live-verified — Brazil/USA deep-dives, a Brazil/USA plant-map toggle (ANEEL SIGA + EIA-860), per-plant and per-capacity leaderboards, USA regional (7-RTO) generation mix, volatility charts, a cross-chart metric filter, pipeline-health panel, live WebSocket indicator |
 | 5 — Railway deployment | ✅ Live-verified — see Deployment below (`docs/tasks/TASK-railway-deploy.md`) |
 

@@ -128,8 +128,9 @@ type is `documentType=A75` (Actual generation per type), `processType=A16` (Real
 poller detects this root element rather than trying to parse it as data); each `TimeSeries` has
 `MktPSRType/psrType` (fuel-type code), `inBiddingZone_Domain.mRID` (generation) vs.
 `outBiddingZone_Domain.mRID` (consumption, e.g. pumped-storage charging — skipped, not
-generation), and `Period`/`timeInterval`/`resolution` (`PT60M` in practice for this document
-type) /`Point` (`position`+`quantity`); unit is `MAW` (megawatt). `psrType` → canonical `metric`:
+generation), and `Period`/`timeInterval`/`resolution` (`PT15M` in practice for Norway's zones,
+live-confirmed 2026-08-27 — see `docs/tasks/TASK-entsoe-eia-pollers.md` §5.3; parsed generically,
+not assumed fixed) /`Point` (`position`+`quantity`); unit is `MAW` (megawatt). `psrType` → canonical `metric`:
 `B01`–`B08` (biomass/fossil combustion variants) → `thermal`; `B10`–`B12` (hydro variants) →
 `hydro`; `B14` → `nuclear`; `B16` → `solar`; `B18`/`B19` → `wind`; `B20` → `other`. Left
 unmapped on purpose (skip+log, not a DLQ case): `B09` geothermal, `B13` marine, `B15`
@@ -160,9 +161,9 @@ ENTSO-E's `MAW` (both power units). Numerically an hourly MWh total and an hourl
 figure are the same number, but that equivalence is a Phase 4 dashboard-layer decision to make
 deliberately when charts compare across sources, not something ingest silently assumes.
 
-**Still open:** both resolutions above were cross-referenced against real third-party clients of
-the live APIs, not a captured response from our own poller — a live verification pass is owed
-once the user has both an ENTSO-E token and an EIA key (`docs/tasks/TASK-entsoe-eia-pollers.md`
+Both resolutions above were cross-referenced against real third-party clients of the live APIs,
+then live-verified against our own poller once the user had both an ENTSO-E token and an EIA key
+(`docs/tasks/TASK-entsoe-eia-pollers.md`
 §5), matching the rigor Phase 1's 366k-row live ONS poll already established.
 
 Iceland is not in ENTSO-E's coverage (not an EU member / not on the synchronous grid).

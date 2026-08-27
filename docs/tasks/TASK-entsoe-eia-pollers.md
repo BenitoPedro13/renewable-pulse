@@ -151,8 +151,7 @@ external email round-trip.
 - `go test ./...` in `apps/ingest` passes, including new `entsoe`/`eia` normalize tests built from
   realistic fixtures matching the confirmed request/response shapes above.
 - ONS's existing poller and tests are unaffected (no changes to `internal/ons`).
-- **Still open**: ENTSO-E live verification, blocked on the API token (requested 2026-08-26 via email
-  to `transparency@entsoe.eu`, ~3 business day turnaround). Follow-up once the token arrives.
+- ENTSO-E live verification: done, see §5.3.
 
 ### 5.1 EIA live verification — done 2026-08-26
 
@@ -209,3 +208,31 @@ single country). Splitting this into separate per-country panels — a real `gen
 API change to group by zone as well as source — is deliberately deferred until ENTSO-E access
 actually exists (user decision, 2026-08-26): no reason to design that contract before there's real
 data to distinguish.
+
+### 5.3 ENTSO-E live verification — done 2026-08-27
+
+The user's ENTSO-E Web API Security Token arrived and was used to hit the real
+`web-api.tp.entsoe.eu/api` endpoint (document type A75, process type A16) for all six configured
+zones (`NO-NO1`–`NO-NO5`, `NL`) over a trailing 24h window. Findings, all from actual API
+responses:
+
+1. **The endpoint and existing `client.go`/`normalize.go` work as built** — all six zones returned
+   200 with well-formed `GL_MarketDocument` XML; 2,446 readings normalized across the six zones with
+   zero fetch or parse errors.
+2. **Resolution is `PT15M` in practice for Norway, not `PT60M`** — contradicting the assumption in
+   `docs/architecture.md` §3 ("`PT60M` in practice for this document type"). No code change needed:
+   `parseResolution` already handles any `PTnnM` value generically (comment in `normalize.go`
+   already flagged `PT15M` as a real possibility, just not confirmed live until now).
+   `docs/architecture.md` §3 updated to reflect the live-confirmed resolution.
+3. **Two more `psrType` codes appear live than the table in §1 covers**: `B15` (Other renewable,
+   93 points) and `B17` (Waste, 282 points) both occurred in the live window. Both were already
+   deliberately left unmapped in `metricByPsrType` (`normalize.go`'s comment already named them
+   as "none are material to Norway's actual hydro/wind-dominated mix") — confirmed correct: they
+   hit the same unmapped-skip path as any other unmapped code, logged and dropped rather than
+   crashing or reaching Redpanda, same posture as ONS's unmapped `nom_tipousina`. No fix needed,
+   just confirms the existing design decision against real data instead of assumption.
+
+No unmapped-`psrType` DLQ concern here (same as EIA's §5.1 finding): unmapped readings never leave
+the ingest process, so nothing lands in `readings.dlq` for this. `docs/tasks/TASK-implementation-plan.md`
+and this repo's `CLAUDE.md` status line updated: Phase 3 (ENTSO-E/EIA) is now live-verified, not
+just code-complete.

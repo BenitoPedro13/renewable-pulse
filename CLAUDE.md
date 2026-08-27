@@ -22,8 +22,9 @@ ONS, ENTSO-E, or EIA. No synthetic or simulated data, anywhere, ever — decided
 during planning, not a default that can be quietly relaxed for convenience (e.g. to fill a demo
 gap). If a real source is unavailable for something, that gap is shown as missing, not faked.
 
-**Status:** Phases 1–3 shipped and live-verified except ENTSO-E (code-complete, unit-tested,
-live verification pending an API token — see `docs/tasks/TASK-entsoe-eia-pollers.md` §5.1).
+**Status:** Phases 1–3 shipped and live-verified, including ENTSO-E (token arrived 2026-08-27 and
+was live-verified against all six configured zones — see
+`docs/tasks/TASK-entsoe-eia-pollers.md` §5.3).
 Phase 4 (`docs/tasks/TASK-live-dashboard.md`) — the live dashboard — is in progress: the API's
 generation-mix/latest/share/plants/live routes and the `apps/web` design-token setup are done;
 the dashboard UI itself is not yet built.
