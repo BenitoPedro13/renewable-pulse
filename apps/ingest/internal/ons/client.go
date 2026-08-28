@@ -20,6 +20,16 @@ import (
 // https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/geracao_usina_2_ho/GERACAO_USINA-2_{YYYY}_{MM}.csv
 const baseURL = "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/geracao_usina_2_ho"
 
+// YearlyFileCutoff is the first year ONS publishes as one file per
+// month/year; every earlier year is published as a single whole-year file
+// instead (confirmed live by probing S3 directly, 2026-08-28 —
+// docs/tasks/TASK-historical-backfill.md §2.4: GERACAO_USINA-2_2000.csv
+// through _2021.csv return 200, GERACAO_USINA-2_2021_12.csv returns 404,
+// GERACAO_USINA-2_2022_01.csv returns 200). FetchMonth only ever fits the
+// >=YearlyFileCutoff shape; a caller walking further back must use
+// FetchYear instead.
+const YearlyFileCutoff = 2022
+
 // fetchRetryAttempts/fetchRetryDelay bound retrying a failed request. A live
 // poll can just wait for next hour's tick on failure, but a backfill's
 // hundreds of sequential monthly requests can't
@@ -33,6 +43,28 @@ const (
 // close the returned ReadCloser.
 func FetchMonth(ctx context.Context, year int, month time.Month) (io.ReadCloser, error) {
 	url := fmt.Sprintf("%s/GERACAO_USINA-2_%04d_%02d.csv", baseURL, year, int(month))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("ons: building request for %s: %w", url, err)
+	}
+
+	resp, err := doWithRetry(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("ons: fetching %s: %w", url, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("ons: fetching %s: unexpected status %s", url, resp.Status)
+	}
+
+	return resp.Body, nil
+}
+
+// FetchYear streams the single whole-year CSV file ONS publishes for years
+// before YearlyFileCutoff. The caller must close the returned ReadCloser.
+func FetchYear(ctx context.Context, year int) (io.ReadCloser, error) {
+	url := fmt.Sprintf("%s/GERACAO_USINA-2_%04d.csv", baseURL, year)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

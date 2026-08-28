@@ -8,6 +8,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -140,17 +141,42 @@ func pollONS(ctx context.Context, pub *publish.Publisher) error {
 var fetchAndPublishONSMonthFn = fetchAndPublishONSMonth
 
 // fetchAndPublishONSMonth fetches, normalizes, and publishes one calendar
-// month of ONS data. Rows that fail to normalize (unmapped generation type,
-// unparseable value, a DST-ambiguous timestamp) are logged and skipped
-// rather than blocking the rest of the file — the same posture Phase 2's DLQ
-// formalizes downstream (docs/architecture.md §5).
+// month of ONS data. Only fits years >= ons.YearlyFileCutoff — ONS groups
+// earlier years into one whole-year file instead (confirmed live,
+// docs/tasks/TASK-historical-backfill.md §2.4); use
+// fetchAndPublishONSYearFn for those.
 func fetchAndPublishONSMonth(ctx context.Context, pub *publish.Publisher, year int, month time.Month, ingestedAt time.Time) (published, skipped int, err error) {
 	body, err := ons.FetchMonth(ctx, year, month)
 	if err != nil {
 		return 0, 0, err
 	}
 	defer body.Close()
+	return publishONSRows(ctx, pub, body, ingestedAt)
+}
 
+// fetchAndPublishONSYearFn is a var (see fetchAndPublishONSMonthFn's doc
+// comment) so backfillONS's year-file branch is testable without a real
+// network call.
+var fetchAndPublishONSYearFn = fetchAndPublishONSYear
+
+// fetchAndPublishONSYear fetches, normalizes, and publishes one whole
+// calendar year of ONS data — the shape ONS actually publishes for years
+// before ons.YearlyFileCutoff (docs/tasks/TASK-historical-backfill.md §2.4).
+func fetchAndPublishONSYear(ctx context.Context, pub *publish.Publisher, year int, ingestedAt time.Time) (published, skipped int, err error) {
+	body, err := ons.FetchYear(ctx, year)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer body.Close()
+	return publishONSRows(ctx, pub, body, ingestedAt)
+}
+
+// publishONSRows normalizes and publishes every row in an ONS CSV body.
+// Rows that fail to normalize (unmapped generation type, unparseable value,
+// a DST-ambiguous timestamp) are logged and skipped rather than blocking
+// the rest of the file — the same posture Phase 2's DLQ formalizes
+// downstream (docs/architecture.md §5).
+func publishONSRows(ctx context.Context, pub *publish.Publisher, body io.Reader, ingestedAt time.Time) (published, skipped int, err error) {
 	err = ons.ParseRows(body, func(row ons.Row) error {
 		reading, normErr := ons.Normalize(row, ingestedAt)
 		if normErr != nil {
@@ -391,24 +417,55 @@ func sleepBetweenChunks(ctx context.Context, delay time.Duration) error {
 	return nil
 }
 
-// backfillONS walks backward one calendar month at a time from `to` (or
-// resumeFrom, if set) down to `from`, inclusive. A single chunk's fetch
-// failure is logged and skipped rather than aborting the whole run — over
-// hundreds of chunks and hours of wall-clock time, an upstream provider's
-// own transient hiccup (a timeout, a 5xx) is expected, not exceptional, and
-// treating it as fatal would make a multi-hour backfill impossible to
-// finish unattended. A skipped chunk just leaves a gap an operator can
-// re-run later with a narrow --backfill-from/--backfill-to targeting it —
-// the same "logged and skipped, never silently faked" posture the DLQ
-// already applies to individual bad rows (docs/architecture.md §5).
+// backfillONS walks backward from `to` (or resumeFrom, if set) down to
+// `from`, inclusive. Chunk granularity switches at ons.YearlyFileCutoff:
+// one calendar month at a time for years >= the cutoff (matching how ONS
+// actually publishes those files), one whole year at a time below it, since
+// ONS groups those years into a single file each — fetching them "by
+// month" would just re-download the same whole-year file up to twelve
+// times over (confirmed live, docs/tasks/TASK-historical-backfill.md §2.4).
+// A single chunk's fetch failure is logged and skipped rather than aborting
+// the whole run — over hundreds of chunks and hours of wall-clock time, an
+// upstream provider's own transient hiccup (a timeout, a 5xx) is expected,
+// not exceptional, and treating it as fatal would make a multi-hour
+// backfill impossible to finish unattended. A skipped chunk just leaves a
+// gap an operator can re-run later with a narrow --backfill-from/
+// --backfill-to targeting it — the same "logged and skipped, never
+// silently faked" posture the DLQ already applies to individual bad rows
+// (docs/architecture.md §5).
 func backfillONS(ctx context.Context, pub *publish.Publisher, from, to time.Time, resumeFrom *time.Time, delay time.Duration) (failedChunks int, err error) {
 	cursor := to
 	if resumeFrom != nil {
 		cursor = *resumeFrom
 	}
-	floor := time.Date(from.Year(), from.Month(), 1, 0, 0, 0, 0, time.UTC)
 
 	for {
+		if cursor.Year() < ons.YearlyFileCutoff {
+			year := cursor.Year()
+			if year < from.Year() {
+				return failedChunks, nil
+			}
+
+			ingestedAt := time.Now().UTC()
+			published, skipped, fetchErr := fetchAndPublishONSYearFn(ctx, pub, year, ingestedAt)
+			if fetchErr != nil {
+				failedChunks++
+				log.Printf("ingest: ons: backfill chunk FAILED, skipping: year=%04d: %v", year, fetchErr)
+			} else {
+				log.Printf("ingest: ons: backfill chunk complete: year=%04d published=%d skipped=%d", year, published, skipped)
+			}
+
+			if year <= from.Year() {
+				return failedChunks, nil
+			}
+			cursor = time.Date(year-1, time.December, 1, 0, 0, 0, 0, time.UTC)
+			if sleepErr := sleepBetweenChunks(ctx, delay); sleepErr != nil {
+				return failedChunks, sleepErr
+			}
+			continue
+		}
+
+		floor := time.Date(from.Year(), from.Month(), 1, 0, 0, 0, 0, time.UTC)
 		chunkStart := time.Date(cursor.Year(), cursor.Month(), 1, 0, 0, 0, 0, time.UTC)
 		if chunkStart.Before(floor) {
 			return failedChunks, nil
