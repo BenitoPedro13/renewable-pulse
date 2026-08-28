@@ -491,6 +491,26 @@ ordinary real-world reporting gaps at individual EIA-930 respondents, not a back
 (there were none — `failed_chunks=0`). No action needed; shown as missing on the dashboard rather
 than faked, per this project's core invariant.
 
+### 2.10 ONS pilot chunk (2000-01) — real bug found and fixed, then clean
+
+The §2.3 pilot step immediately caught a real, previously-undiscovered bug: requesting
+`--backfill-from=2000-01-01 --backfill-to=2000-01-15` 404'd —
+`GERACAO_USINA-2_2000_01.csv` doesn't exist. Probing ONS's S3 bucket directly confirmed §1's
+research note in a way the original `FetchMonth`-only implementation never accounted for: **ONS
+publishes 2000–2021 as one whole-year file each** (`GERACAO_USINA-2_2000.csv`, confirmed HTTP 200;
+`GERACAO_USINA-2_2021_12.csv`, confirmed HTTP 404) **and only switches to one-file-per-month from
+2022 onward** (`GERACAO_USINA-2_2022_01.csv`, confirmed HTTP 200). `FetchMonth` always built the
+month-suffixed URL regardless of year.
+
+**Fixed** (`ons/client.go`'s new `FetchYear` + `YearlyFileCutoff = 2022`; `backfillONS` now
+switches chunk granularity at that boundary — one whole-year fetch per year below it, instead of
+uselessly re-requesting the same whole-year file up to twelve times over via the monthly path).
+Re-ran the same pilot request afterward: it correctly fetched the whole 2000 file once and
+published **993,556 rows, 0 skipped, 0 failed chunks**; `993,322` landed in `readings` (the small
+gap is ordinary idempotent-dedup collision within the source file itself, not a bug); `dlqDepth:
+0`. No unmapped subsystem codes surfaced — §2.3's specific risk for ONS didn't materialize, at
+least not in year 2000. This clears the pilot-check bar for committing to the full run.
+
 ## 3. Why
 
 Every analysis in `docs/tasks/TASK-analytics-roadmap.md` — diversity trends, capacity-factor
