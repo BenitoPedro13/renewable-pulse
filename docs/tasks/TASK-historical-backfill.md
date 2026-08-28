@@ -420,6 +420,59 @@ existing `/pipeline-health` endpoint (already reporting DLQ depth, consumer lag,
 last-successful-poll-per-source per `docs/architecture.md §5`). Watch consumer lag live during a
 run as the signal for whether pacing needs to slow down.
 
+### 2.8 ENTSO-E full-depth backfill — complete (2026-08-28)
+
+Ran to completion via `ingest-backfill` (`start: "/ingest --backfill=entsoe
+--backfill-from=2015-01-05"`), all 6 zones, ~5.7 hours wall-clock (20:31→00:20 UTC). Final result:
+`dlqDepth: 0`, `consumerLag: 0`, `failed_chunks=45` out of ~852 attempted (~5.3%) — all transient
+upstream errors from ENTSO-E's own backend (`Acknowledgement_MarketDocument`, error code 999,
+"I/O error... Timeout deadline"), correctly logged and skipped rather than aborting the run
+(§2.7's resilience fix, added mid-run after attempt #1 died on its very first chunk — see below).
+`refresh_continuous_aggregate('generation_hourly', '2015-01-01', '2026-08-28')` run afterward;
+spot-checked via `GET /generation-mix?source=ENTSOE&zone=NO-NO1&from=2016-06-01...` — real 2016
+hourly hydro data confirmed visible through the API, not just present in the raw table.
+
+**Bug found and fixed mid-run:** the first full-depth attempt died on its very first chunk — a
+single transient ENTSO-E timeout exhausted `doWithRetry`'s 3 attempts and returned an error that
+`backfillEntsoe` treated as fatal, aborting the entire ~800-chunk job. At this scale, an occasional
+upstream hiccup over many hours is expected, not exceptional. Fixed (`apps/ingest/main.go`,
+commit `beb6096`): `backfillONS`/`backfillEntsoe`/`backfillEIA` now log a failed chunk and continue
+to the next one — matching the DLQ's existing "skip and log, never abort the batch" posture — and
+return a `failedChunks` count, logged as a final summary line
+(`ingest: entsoe: backfill complete, failed_chunks=N`).
+
+**The 45 failed chunks are real, precisely-located gaps** — found via a gap-detection query
+against `readings` directly (log retention had already rotated past the individual `chunk FAILED`
+lines by the time the run finished, several hours later — a real limitation worth noting for next
+time: `railway logs`' retention window is not a substitute for `/pipeline-health` or a DB query as
+the source of truth for a multi-hour run):
+
+```sql
+WITH hours AS (
+  SELECT zone, recorded_at,
+         LAG(recorded_at) OVER (PARTITION BY zone ORDER BY recorded_at) AS prev
+  FROM (SELECT DISTINCT zone, date_trunc('hour', recorded_at) AS recorded_at
+        FROM readings WHERE source = 'ENTSOE' AND recorded_at >= '2015-01-01') t
+)
+SELECT zone, prev AS gap_start, recorded_at AS gap_end, (recorded_at - prev) AS gap_length
+FROM hours WHERE recorded_at - prev > interval '1 day' ORDER BY zone, gap_start;
+```
+
+Results: gaps in exact 30-day multiples (30/60/90/150/300 days) on `NL` (4 gaps), `NO-NO2` (3),
+`NO-NO4` (5), `NO-NO5` (1) — these are the 45 failed chunks. Separately, every Norwegian zone
+(`NO-NO1` through `NO-NO5`, **not** `NL`) shares two identical ~1–2 day gaps at 2015-08-06/07 and
+2015-10-17/19 — same dates across five independent zones strongly suggests a real ENTSO-E platform
+outage on those dates, not a bug in this pipeline; not counted among the 45 chunk failures (too
+small to be a 30-day chunk boundary, and it predates this backfill entirely — it would show up in
+live-polled data too if the platform had been queried on those exact days in 2015).
+
+**Follow-up, not yet done:** targeted gap-fill re-runs for the 45 identified ranges (e.g.
+`--backfill=entsoe --backfill-from=2017-05-01 --backfill-to=2017-07-01` to refill `NO-NO4`'s
+2017-05/06 gap — harmless to also re-request the other 5 zones' already-complete data for that
+narrow window, since it's idempotent) — left for a deliberate follow-up rather than done
+automatically, same as the rest of this task's "no full-depth run without a human in the loop"
+posture.
+
 ## 3. Why
 
 Every analysis in `docs/tasks/TASK-analytics-roadmap.md` — diversity trends, capacity-factor
