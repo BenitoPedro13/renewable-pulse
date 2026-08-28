@@ -95,13 +95,14 @@ export default defineRailway(() => {
   const ingestBackfill = service("ingest-backfill", {
     build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile", buildEnvironment: "V3" },
     replicas: { sfo: 1 },
-    // ONS pilot chunk (docs/tasks/TASK-historical-backfill.md §2.3/§2.7):
-    // just 2000-01, ONS's earliest boundary, before committing to the full
-    // 25-year run — checking for unmapped subsystem codes ons/normalize.go
-    // has no Go-side enum check for (unlike ENTSO-E/EIA's closed zone
-    // lists). ENTSO-E and EIA full-depth both completed clean already (see
-    // task doc §2.8/§2.9). Update this per run.
-    start: "/ingest --backfill=ons --backfill-from=2000-01-01 --backfill-to=2000-01-15",
+    // Full ONS depth run (docs/tasks/TASK-historical-backfill.md §1/§2.7):
+    // 2000-01-01 -> now, by far the largest of the three (hundreds of
+    // plants, ~1M rows/year for the 2000-2021 whole-year-file era alone).
+    // The 2000-01 pilot chunk completed clean (0 skipped, 0 DLQ) after
+    // fixing a real year-vs-month file-format bug (task doc §2.10).
+    // ENTSO-E and EIA full-depth both already completed (§2.8/§2.9).
+    // Update this per run.
+    start: "/ingest --backfill=ons --backfill-from=2000-01-01",
     env: {
       EIA_API_KEY: preserve(),
       ENTSOE_API_TOKEN: preserve(),
