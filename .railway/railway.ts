@@ -95,13 +95,13 @@ export default defineRailway(() => {
   const ingestBackfill = service("ingest-backfill", {
     build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile", buildEnvironment: "V3" },
     replicas: { sfo: 1 },
-    // Full EIA depth run (docs/tasks/TASK-historical-backfill.md §1/§2.7):
-    // 2018-07-01 (EIA-930 hourly feed start) -> now, all 8 respondents in
-    // one paginated request per chunk. Follows ENTSO-E's full-depth run,
-    // which completed clean (dlqDepth=0, consumerLag=0, 45/852 chunks
-    // transiently failed and were skipped, see task doc §2.8). Update this
-    // per run.
-    start: "/ingest --backfill=eia --backfill-from=2018-07-01",
+    // ONS pilot chunk (docs/tasks/TASK-historical-backfill.md §2.3/§2.7):
+    // just 2000-01, ONS's earliest boundary, before committing to the full
+    // 25-year run — checking for unmapped subsystem codes ons/normalize.go
+    // has no Go-side enum check for (unlike ENTSO-E/EIA's closed zone
+    // lists). ENTSO-E and EIA full-depth both completed clean already (see
+    // task doc §2.8/§2.9). Update this per run.
+    start: "/ingest --backfill=ons --backfill-from=2000-01-01 --backfill-to=2000-01-15",
     env: {
       EIA_API_KEY: preserve(),
       ENTSOE_API_TOKEN: preserve(),
