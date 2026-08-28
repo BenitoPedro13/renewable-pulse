@@ -473,6 +473,24 @@ narrow window, since it's idempotent) — left for a deliberate follow-up rather
 automatically, same as the rest of this task's "no full-depth run without a human in the loop"
 posture.
 
+### 2.9 EIA full-depth backfill — complete (2026-08-28)
+
+Ran via the same `ingest-backfill` service, `start` switched to `/ingest --backfill=eia
+--backfill-from=2018-07-01`. Much cheaper than ENTSO-E: no per-zone loop (one paginated request
+per chunk covers all 8 respondents), ~98 chunks total vs. ENTSO-E's ~852, finished in ~41 minutes
+(00:46→01:27 UTC) vs. ENTSO-E's ~5.7 hours. Result: **`failed_chunks=0`** — every chunk succeeded,
+no transient-error skips at all this time. `dlqDepth: 0`, `consumerLag: 0`.
+`refresh_continuous_aggregate('generation_hourly', '2018-07-01', '2026-08-28')` run afterward;
+spot-checked via `GET /generation-mix?source=EIA&zone=US-CISO&from=2019-01-01...` — real 2019
+hourly hydro/nuclear/solar/thermal/wind data confirmed visible through the API.
+
+The same gap-detection query (§2.8) run against EIA's data found only small (~1 day), scattered,
+uncorrelated gaps across different respondents on different dates (`US-CISO` 2024-11, `US-ERCO`
+2025-12, `US-MISO` 2024-07, `US-PJM` 2020-08 and 2023-11, `US-SWPP` 2024-02) — consistent with
+ordinary real-world reporting gaps at individual EIA-930 respondents, not a backfill failure
+(there were none — `failed_chunks=0`). No action needed; shown as missing on the dashboard rather
+than faked, per this project's core invariant.
+
 ## 3. Why
 
 Every analysis in `docs/tasks/TASK-analytics-roadmap.md` — diversity trends, capacity-factor
