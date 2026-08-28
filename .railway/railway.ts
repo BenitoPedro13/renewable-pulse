@@ -95,10 +95,13 @@ export default defineRailway(() => {
   const ingestBackfill = service("ingest-backfill", {
     build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile", buildEnvironment: "V3" },
     replicas: { sfo: 1 },
-    // ENTSO-E pilot run (docs/tasks/TASK-historical-backfill.md §2.3/§2.7):
-    // ~8 weeks, all 6 zones, ahead of committing to the full 2015-01->now
-    // depth. Update this per run.
-    start: "/ingest --backfill=entsoe --backfill-from=2026-07-01",
+    // Full EIA depth run (docs/tasks/TASK-historical-backfill.md §1/§2.7):
+    // 2018-07-01 (EIA-930 hourly feed start) -> now, all 8 respondents in
+    // one paginated request per chunk. Follows ENTSO-E's full-depth run,
+    // which completed clean (dlqDepth=0, consumerLag=0, 45/852 chunks
+    // transiently failed and were skipped, see task doc §2.8). Update this
+    // per run.
+    start: "/ingest --backfill=eia --backfill-from=2018-07-01",
     env: {
       EIA_API_KEY: preserve(),
       ENTSOE_API_TOKEN: preserve(),
