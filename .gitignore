@@ -29,3 +29,12 @@ pnpm-debug.log*
 # Editor
 .vscode/
 .idea/
+
+# Terraform (.terraform.lock.hcl IS committed: it pins provider checksums)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+*.tfvars
+!*.tfvars.example
