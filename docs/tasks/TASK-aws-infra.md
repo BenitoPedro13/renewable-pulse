@@ -458,6 +458,25 @@ Each phase is done only when its checks pass. "Works" is not a criterion.
       2026-09-27 to 2026-12-26.
     - `Access-Control-Allow-Origin: https://renewable-pulse.vercel.app`.
     - `wss://renewable-pulse.duckdns.org/live` opens and delivers a `heartbeat` frame.
+  - **Browser `/live` failures after the Vercel switch (2026-09-28), diagnosed:**
+    - **Cause: a browser extension (ad blocker) on the user's Chrome.** In an incognito
+      window (no extensions) `/live` connects: api `req-eq`, no error.
+    - Evidence the server was correct:
+      - a WS upgrade with `Origin: https://renewable-pulse.vercel.app` returns 101, and one
+        with a foreign origin returns 500 "Origin not allowed"
+      - the same page's REST calls reach Caddy with the right Origin and get 200
+      - the blocked WS attempts never appeared in Caddy's or the api's logs at all
+    - Ruled out: HTTP/2 WebSockets (RFC 8441). Caddy's SETTINGS frame does not advertise
+      `ENABLE_CONNECT_PROTOCOL` (0x8), so Chrome opens `/live` over HTTP/1.1.
+    - Visitors whose blocker lists flag dynamic-DNS domains will hit the same thing. If that
+      matters, the fix is a real domain instead of `duckdns.org`.
+    - Two api "Origin not allowed" rejections at 00:37 predate Caddy's access log, so their
+      Origin is unknown. The access log (now on) will show any recurrence.
+  - **Caddyfile reload bug, fixed.**
+    - The Caddyfile is a single-file bind mount. `remote-deploy.sh` replaces the file (new
+      inode), which a running container never sees, so config edits silently didn't apply.
+    - `deploy.sh` now writes `CADDYFILE_SHA256` into the env file, and `compose.prod.yml`
+      passes it to caddy. Any content change recreates the container (verified: "Recreated").
   - **Follow-ups found:**
     - The api and consumer images are ~830 MB each (dev dependencies and the node-gyp toolchain
       ship in the runner stage). Slimming them is Phase 3 work.

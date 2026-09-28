@@ -121,6 +121,11 @@ services:
   caddy:
     <<: *app-defaults
     image: caddy:2.11.4
+    environment:
+      # Set by deploy.sh. The Caddyfile is a single-file bind mount; deploy replaces the file
+      # (new inode), which a running container never sees. Any content change alters this
+      # value, which makes `compose up` recreate caddy.
+      CADDYFILE_SHA256: ${CADDYFILE_SHA256:?}
     ports:
       - "80:80"
       - "443:443"

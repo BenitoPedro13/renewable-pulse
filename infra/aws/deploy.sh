@@ -32,7 +32,7 @@ umask 077
       [ "$value" = "UNSET" ] && value=""
       printf '%s=%s\n' "$key" "$value"
     done
-  printf 'ECR_REGISTRY=%s\nIMAGE_TAG=%s\n' "$ECR_REGISTRY" "$IMAGE_TAG"
+  printf 'ECR_REGISTRY=%s\nIMAGE_TAG=%s\nCADDYFILE_SHA256=%s\n' "$ECR_REGISTRY" "$IMAGE_TAG" "$(sha256sum Caddyfile | cut -d' ' -f1)"
 } > .env.new
 mv .env.new .env
 umask 022

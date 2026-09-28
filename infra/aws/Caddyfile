@@ -12,6 +12,9 @@
 # even though the adapted config did carry profile=shortlived.
 
 renewable-pulse.duckdns.org {
+	# JSON access log to stdout (docker logs). Caddy redacts Cookie/Authorization by default.
+	log
+
 	encode zstd gzip
 
 	# Also carries the /live WebSocket upgrade; reverse_proxy handles that natively.
