@@ -1,0 +1,19 @@
+# TLS terminator + reverse proxy for apps/api (docs/tasks/TASK-aws-infra.md §2.4).
+#
+# renewable-pulse.duckdns.org is a free DuckDNS name with an A record set by hand to the
+# instance's Elastic IP (52.5.78.81). The IP never changes, so there is no dynamic-DNS updater.
+# duckdns.org is on the Public Suffix List, so Let's Encrypt rate limits are per-name, not
+# shared with every DuckDNS user. Certificates are the standard 90-day ones; Caddy issues and
+# renews them automatically over HTTP-01 on port 80.
+#
+# Tried first and abandoned (2026-09-27): a Let's Encrypt IP-address certificate on the bare EIP
+# with `issuer acme { profile shortlived }`. The HTTP-01 challenge validated, but finalize
+# returned "403 unauthorized: authorizations for these identifiers not valid" on Caddy 2.11.4,
+# even though the adapted config did carry profile=shortlived.
+
+renewable-pulse.duckdns.org {
+	encode zstd gzip
+
+	# Also carries the /live WebSocket upgrade; reverse_proxy handles that natively.
+	reverse_proxy api:3001
+}

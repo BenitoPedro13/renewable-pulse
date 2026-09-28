@@ -1,0 +1,133 @@
+# Production stack on the single EC2 host (docs/tasks/TASK-aws-infra.md §2.4). Local dev keeps
+# using infra/docker-compose.yml. Every ${VAR} comes from /opt/renewable-pulse/.env, which
+# deploy.sh writes from SSM Parameter Store at deploy time. Never commit that file.
+#
+# Memory caps sum to ~2 GiB on a 2 GiB (1.8 GiB usable) t4g.small, with a 2 GiB swapfile as the
+# margin. An OOM-kill means a cap gets raised deliberately, not silently.
+
+name: renewable-pulse
+
+x-app-defaults: &app-defaults
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  redpanda:
+    <<: *app-defaults
+    image: docker.redpanda.com/redpandadata/redpanda:v26.2.2 # same as infra/docker-compose.yml
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092
+      - --advertise-kafka-addr internal://redpanda:9092
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+      - --mode dev-container
+      - --smp 1
+      - --memory 512M
+      - --default-log-level=warn
+    # Owned by uid 101 (the image's redpanda user); deploy.sh chowns it.
+    volumes:
+      - /data/redpanda:/var/lib/redpanda/data
+    mem_limit: 700m
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  timescaledb:
+    <<: *app-defaults
+    # Same digest as the local dev database, so pg_dump/pg_restore run across identical
+    # PostgreSQL (17.11) and TimescaleDB (2.29.2) versions.
+    image: timescale/timescaledb:latest-pg17@sha256:bc8527e62f70f0766b29515077965025872fabb5349db421565f69ee273baf2d
+    environment:
+      POSTGRES_USER: renewable_pulse
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in SSM}
+      POSTGRES_DB: renewable_pulse
+      # A subdirectory, so initdb never sees a non-empty mount point.
+      PGDATA: /var/lib/postgresql/data/pgdata
+      # Read by the image's timescaledb-tune on first init. [VERIFY: names against the image README]
+      TS_TUNE_MEMORY: 400MB
+      TS_TUNE_NUM_CPUS: "2"
+    volumes:
+      - /data/timescaledb:/var/lib/postgresql/data
+      - /data/restore:/restore:ro
+    shm_size: 128m
+    mem_limit: 450m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U renewable_pulse -d renewable_pulse"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  consumer:
+    <<: *app-defaults
+    image: ${ECR_REGISTRY}/renewable-pulse/consumer:${IMAGE_TAG:?}
+    environment:
+      DATABASE_URL: postgres://renewable_pulse:${POSTGRES_PASSWORD}@timescaledb:5432/renewable_pulse
+      REDPANDA_BROKERS: redpanda:9092
+      READINGS_TOPIC: readings
+      READINGS_DLQ_TOPIC: readings.dlq
+    depends_on:
+      redpanda: { condition: service_healthy }
+      timescaledb: { condition: service_healthy }
+    mem_limit: 256m
+
+  api:
+    <<: *app-defaults
+    image: ${ECR_REGISTRY}/renewable-pulse/api:${IMAGE_TAG:?}
+    environment:
+      DATABASE_URL: postgres://renewable_pulse:${POSTGRES_PASSWORD}@timescaledb:5432/renewable_pulse
+      REDPANDA_BROKERS: redpanda:9092
+      READINGS_TOPIC: readings
+      READINGS_DLQ_TOPIC: readings.dlq
+      PORT: "3001"
+      HOST: 0.0.0.0
+      ALLOWED_ORIGINS: https://renewable-pulse.vercel.app
+      LIVE_GROUP_ID: live
+      LIVE_HEARTBEAT_MS: "30000"
+      EIA_API_KEY: ${EIA_API_KEY:-}
+    depends_on:
+      redpanda: { condition: service_healthy }
+      timescaledb: { condition: service_healthy }
+    # Exactly one replica: the in-process "live" consumer group would split partitions across
+    # replicas and silently drop live events (TASK-railway-deploy.md §2.5).
+    mem_limit: 256m
+    healthcheck:
+      # The slim Node image has no curl; Node's own fetch does the probe.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/pipeline-health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  ingest:
+    <<: *app-defaults
+    image: ${ECR_REGISTRY}/renewable-pulse/ingest:${IMAGE_TAG:?}
+    environment:
+      REDPANDA_BROKERS: redpanda:9092
+      READINGS_TOPIC: readings
+      POLL_INTERVAL: 1h
+      MAX_IN_FLIGHT: "64"
+      ENTSOE_API_TOKEN: ${ENTSOE_API_TOKEN:-}
+      EIA_API_KEY: ${EIA_API_KEY:-}
+    depends_on:
+      redpanda: { condition: service_healthy }
+    # [VERIFY: peak RSS during an ONS poll on Linux, then tighten or raise]
+    mem_limit: 300m
+
+  caddy:
+    <<: *app-defaults
+    image: caddy:2.11.4
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates persist across restarts, so a redeploy never re-requests them.
+      - /data/caddy:/data
+    depends_on:
+      api: { condition: service_healthy }
+    mem_limit: 96m

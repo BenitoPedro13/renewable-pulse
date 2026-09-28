@@ -228,11 +228,20 @@ older DynamoDB lock table.
   `/renewable-pulse/prod/*` from SSM at deploy time into a root-only env file
   (`/opt/renewable-pulse/.env`, mode 0600).
 
-**API hostname.** It needs HTTPS: the Vercel page is HTTPS, so REST and `/live` must be
-`https://`/`wss://`. Default choice: `api-<eip-dashed>.sslip.io`, which costs USD 0 and needs no
-domain.
-- `[VERIFY: sslip.io is on the Public Suffix List (per-hostname Let's Encrypt rate limits)]`
-- If the user owns a domain, an A record on it replaces this with no other change.
+**API hostname: `renewable-pulse.duckdns.org`** (decided 2026-09-27). It needs HTTPS: the
+Vercel page is HTTPS, so REST and `/live` must be `https://`/`wss://`.
+- It is a free DuckDNS name whose A record was set once, by hand, to the EIP `52.5.78.81`. The
+  EIP never changes, so no dynamic-DNS updater runs on the host.
+- `duckdns.org` is on the Public Suffix List, so Let's Encrypt rate limits are per-name.
+- Caddy issues standard 90-day certificates over HTTP-01.
+- **Rejected along the way:**
+  - `sslip.io` is *not* on the PSL, so its Let's Encrypt rate limit is shared by every user.
+  - A Let's Encrypt **IP-address certificate** on the bare EIP (GA since 2026-01-15, shortlived
+    profile only) was actually tried on Caddy 2.11.4 with `issuer acme { profile shortlived }`.
+    The adapted JSON config did carry `"profile":"shortlived"`, and the HTTP-01 challenge
+    validated from 5 vantage points. But finalize returned
+    `403 urn:ietf:params:acme:error:unauthorized - authorizations for these identifiers not
+    valid: 52.5.78.81`. Not pursued further.
 
 ### 2.5 Phase 3 — CI/CD
 
@@ -415,6 +424,47 @@ Each phase is done only when its checks pass. "Works" is not a criterion.
     for ONS, ENTSOE and EIA within one `POLL_INTERVAL`.
   - `docker stats` peak during an ONS poll is recorded here, per service, and no service has
     been OOM-killed (`docker inspect --format '{{.State.OOMKilled}}'`).
+  - **Done 2026-09-27.** Image tag `ff8223501d754cb0aa0ce07dfbc8902a0fcbe283`, built on the
+    Mac: native arm64, one-off before CI exists.
+  - **Restore:**
+    - Rehearsed first in a throwaway local container with the same image digest: 0
+      `pg_restore` errors, and counts equal to the dump.
+    - The rehearsal also caught the continuous-aggregate "concurrent refresh" race after
+      `timescaledb_post_restore()`. `deploy.sh` now retries it, and it hit and passed that retry
+      in prod too.
+    - Prod restore of `migration/local-2026-09-27.dump` (8.5 MB): 0 errors; ONS 773,472,
+      EIA 9,882, ENTSOE 220, identical to the dump.
+  - **Services:**
+    - All 6 are up; api, redpanda and timescaledb are `healthy`.
+    - `/pipeline-health` shows `dlqDepth=0`, `consumerLag=0`, and a fresh `lastSuccessAt` for
+      ONS, ENTSOE and EIA.
+    - The consumer logged `persisted=41` of 64 on overlapping readings (idempotent upserts
+      over restored rows, no duplicates).
+  - **Memory after the first full poll cycle** (`docker stats`):
+
+    | Service | Used / cap |
+    |---|---|
+    | redpanda | 198 / 700 MiB |
+    | timescaledb | 207 / 450 MiB |
+    | api | 84 / 256 MiB |
+    | consumer | 61 / 256 MiB |
+    | caddy | 37 / 96 MiB |
+    | ingest | 12 / 300 MiB (idle, after the poll; the peak during an ONS poll is still unmeasured) |
+
+    Host: 626 of 1841 MiB used, swap 6 MiB.
+  - **External checks from the Mac:**
+    - `https://renewable-pulse.duckdns.org/pipeline-health` returns 200.
+    - The certificate is Let's Encrypt `YE2`, subject `CN=renewable-pulse.duckdns.org`, valid
+      2026-09-27 to 2026-12-26.
+    - `Access-Control-Allow-Origin: https://renewable-pulse.vercel.app`.
+    - `wss://renewable-pulse.duckdns.org/live` opens and delivers a `heartbeat` frame.
+  - **Follow-ups found:**
+    - The api and consumer images are ~830 MB each (dev dependencies and the node-gyp toolchain
+      ship in the runner stage). Slimming them is Phase 3 work.
+    - The ECR lifecycle rule `tagStatus=any, keep 5` also counts the untagged child/attestation
+      manifests of each image index. ECR never expires a manifest a tagged index still
+      references, so this is safe but keeps fewer releases than intended. Change it to "5 tagged
+      + expire untagged after 1 day" in Phase 3.
 - **Phase 3:**
   - A push to `main` produces 3 ECR images tagged with that SHA.
   - The deploy job goes green and `/pipeline-health` still answers.
