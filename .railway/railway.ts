@@ -15,9 +15,16 @@ export default defineRailway(() => {
     allowOnlineResize: true,
     alerts: { usage: { "80": {}, "95": {}, "100": {} } },
   });
+  // Resized 5000 -> 20000 (2026-08-28): the ONS full-depth backfill filled
+  // the original 5GB volume to 100%, taking the live API down (Postgres
+  // error 53100 disk_full — confirmed live, /pipeline-health and
+  // /generation-mix both 500ing). docs/tasks/TASK-historical-backfill.md
+  // §2.6/§2.9's own "tens of millions of rows" estimate for ONS alone
+  // should have flagged this before running, not after — see that doc for
+  // the incident writeup.
   const timescaledbVolume = volume("timescaledb-volume", {
     region: "sfo",
-    sizeMB: 5000,
+    sizeMB: 20000,
     allowOnlineResize: true,
     alerts: { usage: { "80": {}, "95": {}, "100": {} } },
   });
